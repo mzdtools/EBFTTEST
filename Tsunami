@@ -82,7 +82,7 @@ M.S = {
     LuckyBlockMutation = "Any",
     GodEnabled = false,
     GodWalkY = 0,       -- FIX: default 0
-    GodFloorY = 10,     -- FIX: default 10
+    GodFloorY = -10,     
     DoomEnabled = false,
     DoomTowerEnabled = false,
     DoomTowerOffset = 0,
@@ -2964,7 +2964,7 @@ local W = Fluent:CreateWindow({
 })
 
 -- ========== 🌾 FARM TAB ==========
-local FT = W:AddTab({Title = "Farm", Icon = "wheat"})
+local FT = W:AddTab({Title = "Farm", Icon = "leaf"})
 
 FT:AddParagraph({Title = "🎯 Brainrot Filters", Content = "Kies rarity, naam en mutatie"})
 
@@ -3201,12 +3201,12 @@ AT2:AddDropdown("GodWalkY", {
 end)
 AT2:AddDropdown("GodFloorY", {
     Title = "🟫 Vloer Y",
-    Description = "Default: 10",
+    Description = "Default: -10",
     Values = GODFLOORY,
-    Default = "10",
+    Default = "-10",
     Multi = false
 }):OnChanged(function(v)
-    M.S.GodFloorY = tonumber(v) or 10
+    M.S.GodFloorY = tonumber(v) or -10
     -- Herbouw vloer + muren met nieuwe Y
     if M._isGod then
         local map = M.mapFindCurrentMap()
