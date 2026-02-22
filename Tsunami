@@ -2001,8 +2001,39 @@ function M.stopAutoUpgrade()
 end
 
 -- ========== ANTI AFK ==========
-function M.startAFK() if M.afkThread then return end M.S.AntiAFK = true M.Status.afk = "Actief" pcall(function() for _, c in pairs(getconnections(Player.Idled)) do c:Disable() end end) pcall(function() local vu = game:GetService("VirtualUser") M._afkSteppedConn = RunService.Stepped:Connect(function() if M.S.AntiAFK then pcall(function() vu:CaptureController() vu:ClickButton2(Vector2.new()) end) end end) end) M.afkThread = task.spawn(function() while M.S.AntiAFK do pcall(function() for _, c in pairs(getconnections(Player.Idled)) do c:Disable() end end) task.wait(300) end M.Status.afk = "Uit" end) end
-function M.stopAFK() M.S.AntiAFK = false if M.afkThread then pcall(task.cancel, M.afkThread) M.afkThread = nil end if M._afkSteppedConn then pcall(function() M._afkSteppedConn:Disconnect() end) M._afkSteppedConn = nil end M.Status.afk = "Uit" end
+function M.startAFK()
+    if M.afkThread then return end
+    M.S.AntiAFK = true
+    M.Status.afk = "Actief"
+    pcall(function()
+        for _, c in pairs(getconnections(Player.Idled)) do c:Disable() end
+    end)
+    M.afkThread = task.spawn(function()
+        while M.S.AntiAFK do
+            pcall(function()
+                for _, c in pairs(getconnections(Player.Idled)) do c:Disable() end
+            end)
+            -- Minimale VirtualUser actie, alleen elke 60 seconden
+            pcall(function()
+                local vu = game:GetService("VirtualUser")
+                vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                task.wait(0.1)
+                vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+            end)
+            task.wait(60)
+        end
+        M.Status.afk = "Uit"
+    end)
+end
+function M.stopAFK()
+    M.S.AntiAFK = false
+    if M.afkThread then pcall(task.cancel, M.afkThread) M.afkThread = nil end
+    if M._afkSteppedConn then
+        pcall(function() M._afkSteppedConn:Disconnect() end)
+        M._afkSteppedConn = nil
+    end
+    M.Status.afk = "Uit"
+end
 
 -- ========== INSTANT PICKUP ==========
 function M.setupInstant() for _, o in pairs(workspace:GetDescendants()) do if o:IsA("ProximityPrompt") then pcall(function() o.HoldDuration = 0 end) end end if not M._instantConn then M._instantConn = workspace.DescendantAdded:Connect(function(o) if o:IsA("ProximityPrompt") then pcall(function() o.HoldDuration = 0 end) end end) end end
