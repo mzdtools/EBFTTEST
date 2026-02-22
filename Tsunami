@@ -3149,7 +3149,7 @@ ATG:OnChanged(function(v)
 end)
 
 -- ========== ⚙️ AUTO TAB ==========
-local AT2 = W:AddTab({Title = "Auto", Icon = "robot"})
+local AT2 = W:AddTab({Title = "Tools", Icon = "wrench"})
 
 AT2:AddParagraph({Title = "💰 Geld", Content = ""})
 local MSP = AT2:AddParagraph({Title = "💰 Money Status", Content = "Idle"})
