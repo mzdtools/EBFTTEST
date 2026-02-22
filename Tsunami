@@ -1,14 +1,9 @@
 -- ============================================
 -- loadstring(game:HttpGet("https://raw.githubusercontent.com/mzdtools/EBFTTEST/main/Tsunami"))()
 -- ============================================
--- MzD Hub v12.4
--- FIX: Money collector gebruikt correcte remote path
--- FIX: Slot count dynamisch via workspace.Bases[guid].Slots
--- FIX: GUID dynamisch opgehaald (verandert bij reconnect)
--- FIX: Factory werkt nu correct met HIGH rarities (Celestial/Divine/Infinity)
--- NEW: Icons op Farm, Factory tabs en knoppen
--- NEW: Default GodWalkY = 0, GodFloorY = 10
--- NEW: Deco folder dynamisch verwijderd op elke map
+-- MzD Hub v12.5
+-- FIX: CandyEventParts collector toegevoegd (zoals ValentinesCoinParts)
+-- FIX: GUI Scale slider in Config tab (stappen van 10%, van 50% tot 150%)
 -- ============================================
 getgenv().MzD = {}
 local M = getgenv().MzD
@@ -35,7 +30,6 @@ if not M.ActiveLuckyBlocks then
 end
 
 -- ========== REMOTE: DYNAMISCH PAD ==========
--- Correct pad: ReplicatedStorage.Shared.Remotes.Networking["RF/PlotAction"]
 M.PlotAction = nil
 pcall(function()
     M.PlotAction = game:GetService("ReplicatedStorage")
@@ -44,7 +38,6 @@ pcall(function()
         :WaitForChild("Networking", 10)
         :WaitForChild("RF/PlotAction", 10)
 end)
--- Fallback: old path
 if not M.PlotAction then
     pcall(function()
         M.PlotAction = game:GetService("ReplicatedStorage")
@@ -81,12 +74,13 @@ M.S = {
     LuckyBlockRarity = {"Common"},
     LuckyBlockMutation = "Any",
     GodEnabled = false,
-    GodWalkY = 0,       -- FIX: default 0
-    GodFloorY = -10,     
+    GodWalkY = 0,
+    GodFloorY = -10,
     DoomEnabled = false,
     DoomTowerEnabled = false,
     DoomTowerOffset = 0,
     WallTheme = "Auto",
+    GuiScale = 1.0,
 }
 
 M.Status = {
@@ -120,6 +114,11 @@ M.upgradeThread = nil
 M.valentineThread = nil
 M.valentineCollectorConn = nil
 M._valentineDescAddedConn = nil
+-- *** NIEUW: Candy Event collector state ***
+M._candyCollectorConn = nil
+M._candyDescAddedConn = nil
+M._candyCachedParts = {}
+M._candyLastCacheScan = 0
 M.arcadeThread = nil
 M.mapFixerThread = nil
 M.lastMapName = ""
@@ -235,10 +234,9 @@ local function throttledPlotAction(action, guid, slot)
 end
 
 -- ========== DYNAMIC SLOT COUNT ==========
--- Leest het echte aantal slots uit workspace.Bases[guid].Slots
 function M.getSlotCount()
     if not M.baseGUID then M.findBase() end
-    if not M.baseGUID then return 40 end -- fallback
+    if not M.baseGUID then return 40 end
     local bases = workspace:FindFirstChild("Bases")
     if not bases then return 40 end
     local myBase = bases:FindFirstChild(M.baseGUID)
@@ -249,7 +247,6 @@ function M.getSlotCount()
         for _, _ in pairs(slotsFolder:GetChildren()) do count += 1 end
         if count > 0 then return count end
     end
-    -- Fallback: tel slot X brainrot children
     local maxSlot = 0
     for _, child in pairs(myBase:GetChildren()) do
         local s = child.Name:match("^slot (%d+) brainrot$")
@@ -902,7 +899,6 @@ local function godBuildEgaleVloer(map)
         floor.Parent = workspace
         table.insert(M._godCreatedParts, floor)
 
-        -- Logo op het eerste vloersegment (bovenkant)
         if firstSegment then
             firstSegment = false
             pcall(function()
@@ -926,7 +922,7 @@ local function godBuildEgaleVloer(map)
                 sub.Size               = UDim2.new(0.4, 0, 0.2, 0)
                 sub.Position           = UDim2.new(0.3, 0, 0.7, 0)
                 sub.BackgroundTransparency = 1
-                sub.Text               = "v12.4"
+                sub.Text               = "v12.5"
                 sub.TextColor3         = theme.stripe
                 sub.TextScaled         = true
                 sub.Font               = Enum.Font.Gotham
@@ -1451,9 +1447,7 @@ function M.getAvailableRarities()
 end
 
 -- ============================================
--- FACTORY - FIXED FOR ALL RARITIES (incl. HIGH)
--- High rarities (Celestial/Divine/Infinity) worden
--- NIET geupgraded - alleen gepickt up en gezet.
+-- FACTORY
 -- ============================================
 local function factoryToolMatchesRarity(tool)
     local tMut = tool:GetAttribute("Mutation") or "None"
@@ -1462,13 +1456,11 @@ local function factoryToolMatchesRarity(tool)
     local toolRarity = tool:GetAttribute("Rarity")
     if not bName or bName == "" then return false end
 
-    -- Voor HIGH rarities: geen level check, altijd matchen als rarity klopt
     if toolRarity and M.isHighRarity(toolRarity) then
         if M.S.FactoryRarity == "Any" or M.S.FactoryRarity == toolRarity then return true end
         return false
     end
 
-    -- Level check alleen voor normale rarities
     if lvl >= M.S.FactoryMaxLevel then return false end
 
     if M.S.FactoryMutation == "None" then
@@ -1506,7 +1498,6 @@ function M.startFactoryLoop()
 
                 M.tweenToSlot(ws) task.wait(0.2)
 
-                -- Clear slot als bezet
                 if not M.isSlotEmpty(ws) then
                     M.pickUpBrainrot(ws)
                     task.wait(1)
@@ -1514,7 +1505,6 @@ function M.startFactoryLoop()
                     task.wait(0.5)
                 end
 
-                -- Zoek matching tool
                 local tool = nil
                 local sa = 0
                 while not tool and sa < 5 do
@@ -1555,7 +1545,6 @@ function M.startFactoryLoop()
                     return
                 end
 
-                -- HIGH rarities: NIET upgraden (ze hebben geen normale upgrade loop)
                 if not isHighTool then
                     local myBase = workspace:FindFirstChild("Bases") and workspace.Bases:FindFirstChild(M.baseGUID)
                     local sm2 = myBase and myBase:FindFirstChild("slot " .. ws .. " brainrot")
@@ -1580,7 +1569,6 @@ function M.startFactoryLoop()
                         end
                     end
                 else
-                    -- High rarity: toon status en wacht even
                     M.Status.factory = "★ " .. toolRarity .. ": " .. bName .. " (gezet)"
                     task.wait(1)
                 end
@@ -1669,7 +1657,6 @@ function M.upgradeSlotToMax(slot)
     local mb = workspace:FindFirstChild("Bases") and workspace.Bases:FindFirstChild(M.baseGUID) if not mb then return end
     local sm2 = mb:FindFirstChild("slot " .. slot .. " brainrot") if not sm2 then return end
 
-    -- Check of het een high rarity is - niet upgraden
     local toolRarity = sm2:GetAttribute("Rarity") or ""
     if M.isHighRarity(toolRarity) then return end
 
@@ -1745,7 +1732,6 @@ function M.startFarming()
                     task.wait(1) return
                 end
 
-                -- Collect, Place & Max mode
                 if not M.isSlotEmpty(ws) then
                     M.pickUpBrainrot(ws) task.wait(0.5) M.safeUnequip() task.wait(0.3)
                 end
@@ -1914,9 +1900,7 @@ function M.stopLuckyBlockFarm()
 end
 
 -- ============================================
--- MONEY COLLECTOR - FIXED REMOTE PATH
--- Gebruikt: ReplicatedStorage.Shared.Remotes.Networking["RF/PlotAction"]
--- + Dynamisch slot count via M.getSlotCount()
+-- MONEY COLLECTOR
 -- ============================================
 function M.startMoney()
     if M.moneyThread then return end
@@ -1924,7 +1908,6 @@ function M.startMoney()
     M.Status.money = "Actief"
     if not M.baseGUID then M.findBase() end
 
-    -- Touch-based collector
     M.moneyThread = task.spawn(function()
         while M.S.AutoCollectMoney do
             pcall(function()
@@ -1950,7 +1933,6 @@ function M.startMoney()
         M.Status.money = "Idle"
     end)
 
-    -- Remote-based collector (correcte remote + dynamische slots)
     M.moneyRemoteThread = task.spawn(function()
         while M.S.AutoCollectMoney do
             pcall(function()
@@ -2013,7 +1995,6 @@ function M.startAFK()
             pcall(function()
                 for _, c in pairs(getconnections(Player.Idled)) do c:Disable() end
             end)
-            -- Minimale VirtualUser actie, alleen elke 60 seconden
             pcall(function()
                 local vu = game:GetService("VirtualUser")
                 vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
@@ -2040,19 +2021,148 @@ function M.setupInstant() for _, o in pairs(workspace:GetDescendants()) do if o:
 M.setupInstant()
 
 -- ============================================
--- VALENTINE v12.4
--- Loop:
---   1. Heartbeat: firetouchinterest op alle workspace.ValentinesCoinParts
---      + auto-detect nieuwe spawns via DescendantAdded
---   2. Main thread: check hearts elke seconde
---      < 100  → blijf collecten (status tonen)
---      >= 100 → teleporteer ONDER de CandyGramStation (GodWalkY)
---              → fire ProximityPrompt op CandyGramStation
---              → wacht tot hearts gereset → terug → herhaal
--- GEEN brainrots ophalen!
+-- *** NIEUW: CANDY EVENT COLLECTOR ***
+-- Verzamelt workspace.CandyEventParts op dezelfde manier
+-- als de ValentinesCoinParts heartbeat collector.
+-- Start dit naast de Valentine loop (of standalone).
+-- ============================================
+function M._candyStartCollector()
+    -- Stop oude connections
+    if M._candyCollectorConn then
+        pcall(function() M._candyCollectorConn:Disconnect() end)
+        M._candyCollectorConn = nil
+    end
+    if M._candyDescAddedConn then
+        pcall(function() M._candyDescAddedConn:Disconnect() end)
+        M._candyDescAddedConn = nil
+    end
+
+    M._candyCachedParts = {}
+    M._candyLastCacheScan = tick()
+
+    local function cacheCandyParts()
+        local folder = workspace:FindFirstChild("CandyEventParts")
+        if not folder then return end
+        local fresh = {}
+        -- Alle descendants en directe children
+        for _, p in pairs(folder:GetDescendants()) do
+            if p:IsA("BasePart") then table.insert(fresh, p) end
+        end
+        for _, p in pairs(folder:GetChildren()) do
+            if p:IsA("BasePart") then
+                local al = false
+                for _, f in pairs(fresh) do if f == p then al = true break end end
+                if not al then table.insert(fresh, p) end
+            end
+            -- Ook models/folders: pak alle BaseParts erin
+            if p:IsA("Model") or p:IsA("Folder") then
+                for _, d in pairs(p:GetDescendants()) do
+                    if d:IsA("BasePart") then
+                        local al = false
+                        for _, f in pairs(fresh) do if f == d then al = true break end end
+                        if not al then table.insert(fresh, d) end
+                    end
+                end
+            end
+        end
+        M._candyCachedParts = fresh
+        M._candyLastCacheScan = tick()
+    end
+
+    cacheCandyParts()
+
+    -- Auto-detecteer nieuwe candy parts zodra ze spawnen
+    local candyFolder = workspace:FindFirstChild("CandyEventParts")
+    if candyFolder then
+        M._candyDescAddedConn = candyFolder.DescendantAdded:Connect(function(d)
+            if not M.S.ValentineEnabled then return end
+            if d:IsA("BasePart") then
+                table.insert(M._candyCachedParts, d)
+                -- Meteen aanraken
+                pcall(function()
+                    local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        firetouchinterest(hrp, d, 0)
+                        firetouchinterest(hrp, d, 1)
+                    end
+                end)
+            end
+        end)
+    else
+        -- Wacht op de folder
+        task.spawn(function()
+            local f2 = workspace:WaitForChild("CandyEventParts", 60)
+            if f2 and M.S.ValentineEnabled then
+                cacheCandyParts()
+                M._candyDescAddedConn = f2.DescendantAdded:Connect(function(d)
+                    if not M.S.ValentineEnabled then return end
+                    if d:IsA("BasePart") then
+                        table.insert(M._candyCachedParts, d)
+                        pcall(function()
+                            local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+                            if hrp then firetouchinterest(hrp, d, 0) firetouchinterest(hrp, d, 1) end
+                        end)
+                    end
+                end)
+            end
+        end)
+    end
+
+    -- Heartbeat: raak alle gecachede candy parts aan
+    M._candyCollectorConn = RunService.Heartbeat:Connect(function()
+        if not M.S.ValentineEnabled then return end
+        pcall(function()
+            local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+
+            -- Herlaad cache elke 5 seconden
+            if tick() - M._candyLastCacheScan > 5 then
+                local alive = {}
+                for _, p in pairs(M._candyCachedParts) do
+                    if p and p.Parent then table.insert(alive, p) end
+                end
+                local folder2 = workspace:FindFirstChild("CandyEventParts")
+                if folder2 then
+                    for _, p in pairs(folder2:GetDescendants()) do
+                        if p:IsA("BasePart") then
+                            local found = false
+                            for _, a in pairs(alive) do if a == p then found = true break end end
+                            if not found then table.insert(alive, p) end
+                        end
+                    end
+                end
+                M._candyCachedParts = alive
+                M._candyLastCacheScan = tick()
+            end
+
+            -- Touch alle candy parts
+            for _, p in pairs(M._candyCachedParts) do
+                if p and p.Parent then
+                    firetouchinterest(hrp, p, 0)
+                    firetouchinterest(hrp, p, 1)
+                end
+            end
+        end)
+    end)
+end
+
+function M._candyStopCollector()
+    if M._candyCollectorConn then
+        pcall(function() M._candyCollectorConn:Disconnect() end)
+        M._candyCollectorConn = nil
+    end
+    if M._candyDescAddedConn then
+        pcall(function() M._candyDescAddedConn:Disconnect() end)
+        M._candyDescAddedConn = nil
+    end
+    M._candyCachedParts = {}
+end
+
+-- ============================================
+-- VALENTINE v12.5
+-- Nu ook: CandyEventParts collector (heartbeat)
 -- ============================================
 
--- ─── hearts lezen ───────────────────────────────────────
 function M.getHeartCount()
     local count = 0
     pcall(function()
@@ -2078,18 +2188,13 @@ function M.getHeartCount()
     return count
 end
 
--- ─── CandyGramStation vinden ────────────────────────────
--- Primair: workspace.ValentinesMap.CandyGramStation (exact pad)
--- Fallback: zoek op naam in heel workspace
 function M.findCandyGramStation()
-    -- Exact pad eerst
     local station = nil
     pcall(function()
         station = workspace.ValentinesMap.CandyGramStation
     end)
     if station then return station end
 
-    -- Fallback: zoek op naam
     for _, obj in pairs(workspace:GetDescendants()) do
         local n = obj.Name:lower()
         if n:find("candygram") or n:find("candygrams") or n:find("station") then
@@ -2101,7 +2206,6 @@ function M.findCandyGramStation()
     return nil
 end
 
--- Positie van de station ophalen (voor teleport)
 function M.getStationPosition()
     local station = M.findCandyGramStation()
     if not station then return nil end
@@ -2111,7 +2215,6 @@ function M.getStationPosition()
     elseif station:IsA("Model") then
         pcall(function() pos = station:GetPivot().Position end)
         if not pos then
-            -- zoek eerste BasePart
             for _, d in pairs(station:GetDescendants()) do
                 if d:IsA("BasePart") then pos = d.Position break end
             end
@@ -2120,10 +2223,7 @@ function M.getStationPosition()
     return pos
 end
 
--- ─── coins verzamelen (heartbeat) ───────────────────────
--- Bron: workspace.ValentinesCoinParts (alle children zijn coins)
 function M._valentineStartCoinCollector()
-    -- Sluit oude connections
     if M.valentineCollectorConn then
         pcall(function() M.valentineCollectorConn:Disconnect() end)
         M.valentineCollectorConn = nil
@@ -2133,7 +2233,6 @@ function M._valentineStartCoinCollector()
         M._valentineDescAddedConn = nil
     end
 
-    -- Cache van coin parts
     M._valentineCachedParts = {}
     M._valentineLastCacheScan = tick()
 
@@ -2144,7 +2243,6 @@ function M._valentineStartCoinCollector()
         for _, p in pairs(folder:GetDescendants()) do
             if p:IsA("BasePart") then table.insert(fresh, p) end
         end
-        -- ook directe children
         for _, p in pairs(folder:GetChildren()) do
             if p:IsA("BasePart") then
                 local al = false
@@ -2158,14 +2256,12 @@ function M._valentineStartCoinCollector()
 
     cacheCoins()
 
-    -- Nieuwe coins auto-detecten
     local coinFolder = workspace:FindFirstChild("ValentinesCoinParts")
     if coinFolder then
         M._valentineDescAddedConn = coinFolder.DescendantAdded:Connect(function(d)
             if not M.S.ValentineEnabled then return end
             if d:IsA("BasePart") then
                 table.insert(M._valentineCachedParts, d)
-                -- meteen aanraken
                 pcall(function()
                     local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
                     if hrp then
@@ -2176,7 +2272,6 @@ function M._valentineStartCoinCollector()
             end
         end)
     else
-        -- Wacht op de folder als die nog niet bestaat
         task.spawn(function()
             local f2 = workspace:WaitForChild("ValentinesCoinParts", 60)
             if f2 and M.S.ValentineEnabled then
@@ -2195,20 +2290,17 @@ function M._valentineStartCoinCollector()
         end)
     end
 
-    -- Heartbeat: raak alle gecachede coins aan
     M.valentineCollectorConn = RunService.Heartbeat:Connect(function()
         if not M.S.ValentineEnabled then return end
         pcall(function()
             local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
             if not hrp then return end
 
-            -- Herlaad cache elke 5 seconden
             if tick() - M._valentineLastCacheScan > 5 then
                 local alive = {}
                 for _, p in pairs(M._valentineCachedParts) do
                     if p and p.Parent then table.insert(alive, p) end
                 end
-                -- Voeg nieuwe toe uit folder
                 local folder2 = workspace:FindFirstChild("ValentinesCoinParts")
                 if folder2 then
                     for _, p in pairs(folder2:GetDescendants()) do
@@ -2223,7 +2315,6 @@ function M._valentineStartCoinCollector()
                 M._valentineLastCacheScan = tick()
             end
 
-            -- Touch alle coins
             for _, p in pairs(M._valentineCachedParts) do
                 if p and p.Parent then
                     firetouchinterest(hrp, p, 0)
@@ -2234,9 +2325,6 @@ function M._valentineStartCoinCollector()
     end)
 end
 
--- ─── submit bij CandyGramStation ────────────────────────
--- Teleporteer ONDER de station (zelfde X/Z, maar GodWalkY),
--- dan fire de ProximityPrompt
 function M.submitCandyGrams()
     local stationPos = M.getStationPosition()
     if not stationPos then
@@ -2245,7 +2333,6 @@ function M.submitCandyGrams()
         return false
     end
 
-    -- Teleporteer onder de station op GodWalkY
     local targetCF = CFrame.new(stationPos.X, M.S.GodWalkY, stationPos.Z)
     M.tweenTo(targetCF)
     task.wait(0.3)
@@ -2253,7 +2340,6 @@ function M.submitCandyGrams()
     local fired = false
     local station = M.findCandyGramStation()
     if station then
-        -- Fire alle ProximityPrompts in/op de station
         local function fireAll(obj)
             if not obj then return end
             if obj:IsA("ProximityPrompt") then
@@ -2282,7 +2368,6 @@ function M.submitCandyGrams()
             fireAll(station.Parent)
         end
 
-        -- Ook firetouchinterest voor alle BaseParts van de station
         local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
         if hrp then
             local function touchAll(obj)
@@ -2299,7 +2384,6 @@ function M.submitCandyGrams()
         end
     end
 
-    -- Fallback: alle nabije prompts binnen 50 studs
     if not fired then
         local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
         if hrp then
@@ -2324,18 +2408,17 @@ function M.submitCandyGrams()
     return fired
 end
 
--- ─── Main valentine loop ─────────────────────────────────
 function M.startValentine()
     if M.valentineThread then return end
     M.S.ValentineEnabled = true
     M.Status.valentineCount = 0
     M.Status.valentine = "Opstarten..."
 
-    -- Zorg dat God mode aan is (voor onder-map lopen)
     if not M._isGod then M.enableGod() end
 
-    -- Start coin collector (heartbeat)
+    -- Start BEIDE collectors: ValentinesCoinParts + CandyEventParts
     M._valentineStartCoinCollector()
+    M._candyStartCollector()      -- *** NIEUW ***
 
     M.valentineThread = task.spawn(function()
         local submitCount = 0
@@ -2351,15 +2434,14 @@ function M.startValentine()
 
                 local h = M.getHeartCount()
                 local coinCount = #M._valentineCachedParts
-                M.Status.valentine = "💝 " .. h .. "/100 hearts | 🪙 " .. coinCount .. " coins | #" .. submitCount
+                local candyCount = #M._candyCachedParts  -- *** NIEUW ***
+                M.Status.valentine = "💝 " .. h .. "/100 hearts | 🪙 " .. coinCount .. " | 🍬 " .. candyCount .. " | #" .. submitCount
 
                 if h >= 100 then
-                    -- Genoeg hearts → ga submiten
                     M.Status.valentine = "🏃 Naar station... H:" .. h
                     local ok2 = M.submitCandyGrams()
 
                     if ok2 then
-                        -- Wacht tot hearts gereset (max 5 sec)
                         local prevH = h
                         local waitStart = tick()
                         repeat
@@ -2381,7 +2463,6 @@ function M.startValentine()
 
                     task.wait(0.5)
                 else
-                    -- Nog niet genoeg hearts, gewoon wachten (collector loopt op heartbeat)
                     task.wait(1)
                 end
             end)
@@ -2391,7 +2472,7 @@ function M.startValentine()
             end
         end
 
-        -- Stop collector
+        -- Stop beide collectors
         if M.valentineCollectorConn then
             pcall(function() M.valentineCollectorConn:Disconnect() end)
             M.valentineCollectorConn = nil
@@ -2401,6 +2482,7 @@ function M.startValentine()
             M._valentineDescAddedConn = nil
         end
         M._valentineCachedParts = {}
+        M._candyStopCollector()   -- *** NIEUW ***
         M.Status.valentine = "Idle"
         M.valentineThread = nil
     end)
@@ -2421,6 +2503,7 @@ function M.stopValentine()
         M._valentineDescAddedConn = nil
     end
     M._valentineCachedParts = {}
+    M._candyStopCollector()       -- *** NIEUW ***
     M.Status.valentine = "Idle"
 end
 
@@ -2430,16 +2513,10 @@ function M.stopArcade() M.S.ArcadeEnabled = false if M.arcadeThread then pcall(t
 
 -- ============================================
 -- MAP FIXER
--- W   = corridor breedte (Z-as)
--- WH  = muurhoogte — groot genoeg voor volledige map
--- WT  = muurdikte
--- INT = update interval
--- WY wordt DYNAMISCH berekend per mapBuildWalls aanroep
---   zodat muren altijd starten bij de MzD god-vloer (GodFloorY)
 -- ============================================
 local MF = {W=420, WH=220, WT=6, INT=8}
 MF.SZ = MF.W / 2
-MF.WY = 100   -- fallback; echte waarde berekend in mapBuildWalls
+MF.WY = 100
 
 local function safeDestroyFolder(parent, fn)
     if not parent then return end
@@ -2518,10 +2595,6 @@ local function getFloorParts(map, si)
     return fl
 end
 
--- ============================================
--- DECO VERWIJDERAAR - Dynamisch op ELKE map
--- Verwijdert workspace.[MapName].Deco (en aliassen)
--- ============================================
 local DECO_NAMES = {"Deco", "Decoration", "Decorations", "Decor", "Props", "Prop", "Effects", "VFX", "Extras", "Extra"}
 
 function M.removeMapDeco(map)
@@ -2536,8 +2609,6 @@ function M.removeMapDeco(map)
             end)
         end
     end
-    -- Ook direct op workspace zoeken: workspace.MarsMap.Deco etc.
-    -- Dynamisch: map.Name + "." + decoName
     for _, child in pairs(map:GetChildren()) do
         if child:IsA("Folder") or child:IsA("Model") then
             local n = child.Name:lower()
@@ -2554,7 +2625,6 @@ end
 
 function M.mapCleanup(map)
     for _, n in pairs(MAP_FOLDERS_REMOVE) do safeDestroyFolder(map, n) end
-    -- Verwijder Deco
     M.removeMapDeco(map)
     for _, d in pairs(map:GetDescendants()) do
         if d.Parent and not isMzDPart(d) and d:IsA("BasePart") and isWallPart(d) then
@@ -2645,24 +2715,15 @@ function M.mapFillGaps(map, sx, ex)
 end
 
 function M.mapBuildWalls(map, sx, ex)
-    -- Muren worden ABSOLUUT gepositioneerd:
-    --   Start altijd op Y = WALL_BOTTOM (ver genoeg onder elke god vloer)
-    --   Hoogte = WALL_H (hoog genoeg om boven de hele map uit te steken)
-    -- Zo worden ze nooit afgekapt, ongeacht GodFloorY instelling.
-    local WALL_BOTTOM = -25          -- onderkant muur, ruim onder de laagste god vloer
-    local WALL_H      = 300          -- totale hoogte: van -25 tot +275, hoog genoeg voor elke map
-    local WALL_MID_Y  = WALL_BOTTOM + WALL_H / 2   -- = 125
+    local WALL_BOTTOM = -25
+    local WALL_H      = 300
+    local WALL_MID_Y  = WALL_BOTTOM + WALL_H / 2
 
-    -- Stripe posities relatief aan de bovenkant van de god-vloer
-    local floorTop  = M.S.GodFloorY + 2   -- bovenkant MzD god vloer
-    local sBot = floorTop + 1             -- net boven vloer
-    local sMid = floorTop + WALL_H * 0.2  -- 20% hoogte
-    local sTop = floorTop + WALL_H * 0.85 -- 85% hoogte
+    local floorTop  = M.S.GodFloorY + 2
+    local sBot = floorTop + 1
+    local sMid = floorTop + WALL_H * 0.2
+    local sTop = floorTop + WALL_H * 0.85
 
-    -- Logo Y op de muur (midden van het zichtbare gedeelte boven de vloer)
-    local logoY = floorTop + WALL_H * 0.35
-
-    -- Check of muren al goed staan (juiste hoogte + Y)
     local mf = map:FindFirstChild("MzDHubWalls")
     if mf then
         local fw = mf:FindFirstChild("FrontWall_1")
@@ -2682,7 +2743,6 @@ function M.mapBuildWalls(map, sx, ex)
 
     local theme = getThemeColors()
 
-    -- Massieve muur part aanmaken
     local function mw(nm, sz, ps)
         local w = Instance.new("Part")
         w.Name = nm
@@ -2698,7 +2758,6 @@ function M.mapBuildWalls(map, sx, ex)
         return w
     end
 
-    -- Neon stripe aanmaken
     local function ms(nm, sz, ps)
         local s = Instance.new("Part")
         s.Name = nm
@@ -2711,7 +2770,6 @@ function M.mapBuildWalls(map, sx, ex)
         s.Parent = mf
     end
 
-    -- Logo SurfaceGui op een muur (voor EN achterkant)
     local function addWallLogo(w, face)
         local sg = Instance.new("SurfaceGui")
         sg.Face = face
@@ -2733,7 +2791,7 @@ function M.mapBuildWalls(map, sx, ex)
         sub.Size               = UDim2.new(0.5, 0, 0.2, 0)
         sub.Position           = UDim2.new(0.25, 0, 0.68, 0)
         sub.BackgroundTransparency = 1
-        sub.Text               = "v12.4"
+        sub.Text               = "v12.5"
         sub.TextColor3         = Color3.fromRGB(200, 200, 200)
         sub.TextScaled         = true
         sub.Font               = Enum.Font.Gotham
@@ -2747,50 +2805,6 @@ function M.mapBuildWalls(map, sx, ex)
         line.Parent          = sg
     end
 
-    -- Logo op de god-vloer (eerste MzDGodFloor segment)
-    local function addFloorLogo()
-        local floorPart = nil
-        for _, c in pairs(workspace:GetChildren()) do
-            if c.Name == "MzDGodFloor" and c:IsA("BasePart") then
-                floorPart = c
-                break
-            end
-        end
-        if not floorPart then return end
-
-        -- Verwijder oude SurfaceGui's op dit segment
-        for _, ch in pairs(floorPart:GetChildren()) do
-            if ch:IsA("SurfaceGui") then ch:Destroy() end
-        end
-
-        local sg = Instance.new("SurfaceGui")
-        sg.Face = Enum.NormalId.Top
-        sg.CanvasSize = Vector2.new(2400, 800)
-        sg.AlwaysOnTop = false
-        sg.Parent = floorPart
-
-        local title = Instance.new("TextLabel")
-        title.Size               = UDim2.new(1, 0, 0.6, 0)
-        title.Position           = UDim2.new(0, 0, 0.05, 0)
-        title.BackgroundTransparency = 1
-        title.Text               = "MzD Hub"
-        title.TextColor3         = theme.glow
-        title.TextScaled         = true
-        title.Font               = Enum.Font.GothamBold
-        title.Parent             = sg
-
-        local sub = Instance.new("TextLabel")
-        sub.Size               = UDim2.new(0.4, 0, 0.2, 0)
-        sub.Position           = UDim2.new(0.3, 0, 0.7, 0)
-        sub.BackgroundTransparency = 1
-        sub.Text               = "v12.4"
-        sub.TextColor3         = theme.stripe
-        sub.TextScaled         = true
-        sub.Font               = Enum.Font.Gotham
-        sub.Parent             = sg
-    end
-
-    -- Bouw muren in segmenten (max 2000 studs per Part)
     local segs = {}
     local p2 = sx
     while p2 < ex do
@@ -2802,38 +2816,30 @@ function M.mapBuildWalls(map, sx, ex)
     for i, s in pairs(segs) do
         local cx = s.s + s.l / 2
 
-        -- VOORMUUR
         local fw = mw("FrontWall_" .. i,
             Vector3.new(s.l, WALL_H, MF.WT),
             Vector3.new(cx, WALL_MID_Y, MF.SZ + MF.WT / 2))
         addWallLogo(fw, Enum.NormalId.Front)
         addWallLogo(fw, Enum.NormalId.Back)
 
-        -- Neon stripes voormuur
         ms("FS_bot" .. i, Vector3.new(s.l, 2,   0.4), Vector3.new(cx, sBot, MF.SZ + MF.WT + 0.3))
         ms("FS_mid" .. i, Vector3.new(s.l, 1,   0.4), Vector3.new(cx, sMid, MF.SZ + MF.WT + 0.3))
         ms("FS_top" .. i, Vector3.new(s.l, 2,   0.4), Vector3.new(cx, sTop, MF.SZ + MF.WT + 0.3))
 
-        -- ACHTERMUUR
         local bw = mw("BackWall_" .. i,
             Vector3.new(s.l, WALL_H, MF.WT),
             Vector3.new(cx, WALL_MID_Y, -MF.SZ - MF.WT / 2))
         addWallLogo(bw, Enum.NormalId.Front)
         addWallLogo(bw, Enum.NormalId.Back)
 
-        -- Neon stripes achtermuur
         ms("BS_bot" .. i, Vector3.new(s.l, 2,   0.4), Vector3.new(cx, sBot, -MF.SZ - MF.WT - 0.3))
         ms("BS_mid" .. i, Vector3.new(s.l, 1,   0.4), Vector3.new(cx, sMid, -MF.SZ - MF.WT - 0.3))
         ms("BS_top" .. i, Vector3.new(s.l, 2,   0.4), Vector3.new(cx, sTop, -MF.SZ - MF.WT - 0.3))
     end
 
-    -- Linker en rechter eindmuren
     local totalZ = MF.SZ * 2 + MF.WT * 2 + 2
     mw("LeftWall",  Vector3.new(MF.WT, WALL_H, totalZ), Vector3.new(sx - MF.WT / 2, WALL_MID_Y, 0))
     mw("RightWall", Vector3.new(MF.WT, WALL_H, totalZ), Vector3.new(ex + MF.WT / 2, WALL_MID_Y, 0))
-
-    -- Logo op de vloer
-    pcall(addFloorLogo)
 
     M._wallZ_front = MF.SZ - 3
     M._wallZ_back  = -MF.SZ + 3
@@ -2855,11 +2861,9 @@ function M.mapFixCollision(map, si)
         for _, w in pairs(mf2:GetChildren()) do
             if w:IsA("BasePart") then
                 local n = w.Name
-                -- Neon stripes: geen collisie
                 if n:find("FS_") or n:find("BS_") then
                     w.CanCollide = false
                 else
-                    -- Echte muren: collisie aan
                     w.CanCollide = true
                     w.Anchored = true
                 end
@@ -2880,7 +2884,7 @@ function M.mapRunFix()
     end
     local sx, ex = M.mapDetectXRange(map, si)
     if mapChanged then
-        pcall(function() M.mapCleanup(map) end)         -- bevat removeMapDeco
+        pcall(function() M.mapCleanup(map) end)
         pcall(function() M.mapCleanupShared(si) end)
         pcall(function() M.mapCleanupMisc() end)
         pcall(function() M.cleanupEventMaps() end)
@@ -2917,7 +2921,7 @@ function M.stopMapFixer()
     M.Status.mapFixer = "Uit"
 end
 
-print("[MzD Hub] Core v12.4 Geladen")
+print("[MzD Hub] Core v12.5 Geladen")
 
 -- ============================================
 -- GUI
@@ -2947,15 +2951,96 @@ local SL = {} for i = 1, 40 do table.insert(SL, tostring(i)) end
 local SPD = {"200","400","600","800","1000","1500","2000","3000","4000","INSTANT"}
 local SPM = {["200"]=200,["400"]=400,["600"]=600,["800"]=800,["1000"]=1000,["1500"]=1500,["2000"]=2000,["3000"]=3000,["4000"]=4000,["INSTANT"]=9999}
 local CSPD = {"100","200","300","400","500","600","800","1000","1500","2000"}
--- FIX: Default GodWalkY = 0, GodFloorY = 10
 local GODWALKY = {"5","3","1","0","-1","-2","-3","-5","-8","-10","-15"}
 local GODFLOORY = {"15","12","10","8","5","3","0","-3","-5","-8","-10","-15","-20"}
 local TOWEROFFSET = {"-5","-3","-2","-1","0","1","2","3","5"}
 local THEMES = {"Auto","Dark","Doom","Valentine","UFO","Bright"}
 
+-- *** GUI SCALE HELPER ***
+-- Zoekt de Fluent ScreenGui op en past de grootte aan
+local _guiScaleGui = nil
+local function applyGuiScale(scale)
+    M.S.GuiScale = scale
+    -- Zoek de Fluent ScreenGui (bevat een Frame met de window)
+    task.spawn(function()
+        task.wait(0.1)
+        for _, gui in pairs(Player.PlayerGui:GetChildren()) do
+            if gui:IsA("ScreenGui") then
+                for _, frame in pairs(gui:GetChildren()) do
+                    if frame:IsA("Frame") and frame.Name == "Main" then
+                        -- Dit is de Fluent main window frame
+                        -- Scale via UIScale als die er is, anders aanmaken
+                        local uiScale = frame:FindFirstChildOfClass("UIScale")
+                        if not uiScale then
+                            uiScale = Instance.new("UIScale")
+                            uiScale.Parent = frame
+                        end
+                        uiScale.Scale = scale
+                        _guiScaleGui = gui
+                        return
+                    end
+                end
+            end
+        end
+        -- Fallback: zoek via naam
+        if not _guiScaleGui then
+            for _, gui in pairs(Player.PlayerGui:GetChildren()) do
+                if gui:IsA("ScreenGui") and gui.Name:find("Fluent") then
+                    local main = gui:FindFirstChild("Main", true)
+                    if main and main:IsA("Frame") then
+                        local uiScale = main:FindFirstChildOfClass("UIScale")
+                        if not uiScale then
+                            uiScale = Instance.new("UIScale")
+                            uiScale.Parent = main
+                        end
+                        uiScale.Scale = scale
+                        _guiScaleGui = gui
+                        return
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- Alternatieve directe aanpak: pas de window size aan
+local _fluentWindow = nil  -- wordt gezet na CreateWindow
+local function applyGuiScaleDirect(scale)
+    M.S.GuiScale = scale
+    -- Probeer alle ScreenGuis te vinden met Fluent content
+    for _, gui in pairs(Player.PlayerGui:GetChildren()) do
+        if gui:IsA("ScreenGui") then
+            local function scaleFrame(f)
+                if not f or not f:IsA("GuiObject") then return end
+                local us = f:FindFirstChildOfClass("UIScale")
+                if not us then
+                    us = Instance.new("UIScale")
+                    us.Parent = f
+                end
+                us.Scale = scale
+            end
+            -- Zoek Main frame in Fluent GUI
+            for _, child in pairs(gui:GetChildren()) do
+                if child:IsA("Frame") then
+                    -- Check of dit de Fluent window is (heeft titelbalk)
+                    local hasFluent = false
+                    for _, d in pairs(child:GetDescendants()) do
+                        if d:IsA("TextLabel") and (d.Text == "MzD Hub" or d.Text == "v12.5") then
+                            hasFluent = true break
+                        end
+                    end
+                    if hasFluent then
+                        scaleFrame(child)
+                    end
+                end
+            end
+        end
+    end
+end
+
 local W = Fluent:CreateWindow({
     Title = "MzD Hub",
-    SubTitle = "v12.4",
+    SubTitle = "v12.5",
     TabWidth = 160,
     Size = UDim2.fromOffset(640, 540),
     Acrylic = true,
@@ -3101,10 +3186,10 @@ ET:AddButton({Title = "⏹ Doom Alles Uit", Callback = function()
     Fluent:Notify({Title = "🌋 Doom", Content = "Gestopt + hersteld", Duration = 3})
 end})
 
--- VALENTINE EVENT
+-- VALENTINE / CANDY EVENT
 ET:AddParagraph({
-    Title = "💝 Valentine Event",
-    Content = "Verzamelt hearts via ValentinesCoinParts\nBij 100 hearts → CandyGramStation → submit\nGeen brainrots ophalen!"
+    Title = "💝 Valentine / Candy Event",
+    Content = "Verzamelt hearts via:\n• ValentinesCoinParts (coins)\n• CandyEventParts (candy) ← NIEUW\nBij 100 hearts → CandyGramStation → submit"
 })
 
 local VSP = ET:AddParagraph({Title = "💝 Valentine Status", Content = "Idle"})
@@ -3113,15 +3198,17 @@ VTG:OnChanged(function(v)
     if v then M.startValentine() else M.stopValentine() end
 end)
 
-ET:AddButton({Title = "💝 Info: Station + Coins", Callback = function()
+ET:AddButton({Title = "💝 Info: Station + Coins + Candy", Callback = function()
     local stationPos = M.getStationPosition()
     local station = M.findCandyGramStation()
     local coinFolder = workspace:FindFirstChild("ValentinesCoinParts")
+    local candyFolder = workspace:FindFirstChild("CandyEventParts")
     local coinCount = coinFolder and #coinFolder:GetChildren() or 0
+    local candyCount = candyFolder and #candyFolder:GetChildren() or 0
     local h = M.getHeartCount()
     local info = "Hearts: " .. h .. "/100"
-    info = info .. "\nCoins in folder: " .. coinCount
-    info = info .. "\nGecached: " .. #M._valentineCachedParts
+    info = info .. "\nValentinesCoinParts: " .. coinCount .. " (cached: " .. #M._valentineCachedParts .. ")"
+    info = info .. "\nCandyEventParts: " .. candyCount .. " (cached: " .. #M._candyCachedParts .. ")"
     if station then
         info = info .. "\nStation: " .. station.Name
     else
@@ -3193,7 +3280,7 @@ AT2:AddDropdown("GodWalkY", {
     Title = "🚶 Loop Y",
     Description = "Default: 0",
     Values = GODWALKY,
-    Default = "0",   -- FIX: default 0
+    Default = "0",
     Multi = false
 }):OnChanged(function(v)
     M.S.GodWalkY = tonumber(v) or 0
@@ -3207,12 +3294,10 @@ AT2:AddDropdown("GodFloorY", {
     Multi = false
 }):OnChanged(function(v)
     M.S.GodFloorY = tonumber(v) or -10
-    -- Herbouw vloer + muren met nieuwe Y
     if M._isGod then
         local map = M.mapFindCurrentMap()
         if map then
             pcall(function() godBuildEgaleVloer(map) end)
-            -- Gooi bestaande muren weg zodat ze met juiste stripes herbouwd worden
             local mf = map:FindFirstChild("MzDHubWalls")
             if mf then pcall(function() mf:Destroy() end) end
             local sx, ex = M.mapDetectXRange(map, M.mapFindShared(map.Name))
@@ -3258,6 +3343,53 @@ CT:AddDropdown("WallTheme", {
     M._lastFixedMapName = ""
     pcall(function() M.mapRunFix() end)
     if M._isGod then M.disableGod() task.wait(0.3) M.enableGod() end
+end)
+
+-- *** NIEUW: GUI SCALE SLIDER ***
+CT:AddParagraph({
+    Title = "🔎 GUI Schaal",
+    Content = "Pas de grootte van de GUI aan.\n100% = normaal, 70% = kleiner"
+})
+CT:AddSlider("GuiScale", {
+    Title = "🔎 GUI Schaal %",
+    Description = "Stappen van 10% | 50% t/m 150%",
+    Default = 100,
+    Min = 50,
+    Max = 150,
+    Rounding = 0,
+}):OnChanged(function(v)
+    -- Rond af op stappen van 10
+    local stepped = math.floor(v / 10 + 0.5) * 10
+    local scale = stepped / 100
+    M.S.GuiScale = scale
+
+    -- Zoek de Fluent window en pas UIScale aan
+    pcall(function()
+        for _, gui in pairs(Player.PlayerGui:GetChildren()) do
+            if gui:IsA("ScreenGui") then
+                for _, child in pairs(gui:GetChildren()) do
+                    if child:IsA("Frame") then
+                        -- Kijk of er Fluent content in zit (MzD Hub label)
+                        local isFluent = false
+                        for _, d in pairs(child:GetDescendants()) do
+                            if d:IsA("TextLabel") and (d.Text == "MzD Hub" or d.Text == "v12.5") then
+                                isFluent = true
+                                break
+                            end
+                        end
+                        if isFluent then
+                            local uiScale = child:FindFirstChildOfClass("UIScale")
+                            if not uiScale then
+                                uiScale = Instance.new("UIScale")
+                                uiScale.Parent = child
+                            end
+                            uiScale.Scale = scale
+                        end
+                    end
+                end
+            end
+        end
+    end)
 end)
 
 CT:AddButton({Title = "🔄 Herlaad Brainrot Lijst", Callback = function()
@@ -3313,8 +3445,9 @@ CT:AddButton({Title = "📡 Debug Info", Callback = function()
     info = info .. "\nGUID:" .. (M.baseGUID or "?")
     info = info .. "\nSlots:" .. slotCount
     info = info .. "\nRemote:" .. (M.PlotAction and "OK" or "NIET GEVONDEN!")
-    info = info .. "\nThrottle:" .. PLOT_COOLDOWN .. "s"
-    Fluent:Notify({Title = "📡 Debug v12.3", Content = info, Duration = 12})
+    info = info .. "\nCandyParts:" .. #M._candyCachedParts
+    info = info .. "\nScale:" .. math.floor(M.S.GuiScale * 100) .. "%"
+    Fluent:Notify({Title = "📡 Debug v12.5", Content = info, Duration = 12})
 end})
 
 local IP = CT:AddParagraph({Title = "ℹ️ Info", Content = "..."})
@@ -3332,20 +3465,16 @@ SaveManager:BuildConfigSection(ST2)
 task.spawn(function()
     while task.wait(1) do
         pcall(function()
-            -- Farm
             FSP:SetDesc((M.S.Farming and M.Status.farm or "Idle") .. " | #" .. M.Status.farmCount)
             FPP:SetDesc("Geplaatst:" .. M.Status.placeCount .. " | Geupgrade:" .. M.Status.upgradeCount)
             if not M.S.Farming then pcall(function() if FTG.Value then FTG:SetValue(false) end end) end
 
-            -- Lucky Blocks
             LBSP:SetDesc((M.S.LuckyBlockEnabled and M.Status.luckyBlock or "Idle") .. " #" .. M.Status.luckyBlockCount)
             if not M.S.LuckyBlockEnabled then pcall(function() if LBTG.Value then LBTG:SetValue(false) end end) end
 
-            -- Factory
             FCSP:SetDesc((M.Status.factory or "Idle") .. " #" .. M.Status.factoryCount)
             if not M.S.FactoryEnabled then pcall(function() if FCTG.Value then FCTG:SetValue(false) end end) end
 
-            -- Doom
             if M.S.DoomEnabled then
                 local folder = workspace:FindFirstChild("DoomEventParts")
                 local fc = folder and #folder:GetChildren() or 0
@@ -3353,7 +3482,6 @@ task.spawn(function()
             else DMSP:SetDesc("Uit") end
             if not M.S.DoomEnabled then pcall(function() if DMTG.Value then DMTG:SetValue(false) end end) end
 
-            -- Tower
             if M.S.DoomTowerEnabled then
                 local tY = getTowerY()
                 local bY = getTowerBottomY()
@@ -3361,39 +3489,36 @@ task.spawn(function()
             else DTSP:SetDesc("Uit") end
             if not M.S.DoomTowerEnabled then pcall(function() if DTTG.Value then DTTG:SetValue(false) end end) end
 
-            -- Valentine
-            VSP:SetDesc((M.S.ValentineEnabled and M.Status.valentine or "Idle") .. " #" .. M.Status.valentineCount)
+            -- Valentine status toont nu ook candy count
+            if M.S.ValentineEnabled then
+                VSP:SetDesc(M.Status.valentine .. " | 🍬 " .. #M._candyCachedParts)
+            else
+                VSP:SetDesc("Idle")
+            end
             if not M.S.ValentineEnabled then pcall(function() if VTG.Value then VTG:SetValue(false) end end) end
 
-            -- Arcade
             ASP:SetDesc(M.S.ArcadeEnabled and ("Actief #" .. M.Status.arcadeCount) or "Idle")
             if not M.S.ArcadeEnabled then pcall(function() if ATG.Value then ATG:SetValue(false) end end) end
 
-            -- Money
             MSP:SetDesc(M.S.AutoCollectMoney and ("Actief | Slots:" .. M.getSlotCount()) or "Idle")
             if not M.S.AutoCollectMoney then pcall(function() if MTG.Value then MTG:SetValue(false) end end) end
 
-            -- Upgrade
             USP:SetDesc((M.S.AutoUpgrade and M.upgradeThread and M.Status.upgrade or "Idle") .. " #" .. M.Status.upgradeCount)
             if not (M.S.AutoUpgrade and M.upgradeThread) then pcall(function() if UTG.Value then UTG:SetValue(false) end end) end
 
-            -- Map Fixer
             MFSP:SetDesc(M.S.MapFixerEnabled and M.Status.mapFixer or "Uit")
             if not M.S.MapFixerEnabled then pcall(function() if MFTG.Value then MFTG:SetValue(false) end end) end
 
-            -- AFK
             AFKSP:SetDesc("AFK: " .. M.Status.afk)
             if not M.S.AntiAFK then pcall(function() if AFKTG.Value then AFKTG:SetValue(false) end end) end
 
-            -- God
             GDSP:SetDesc(M.Status.god)
             if not M._isGod then pcall(function() if GDTG.Value then GDTG:SetValue(false) end end) end
 
-            -- Info
             local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
             local curY = hrp and string.format("%.1f", hrp.Position.Y) or "?"
             local slotCount = M.getSlotCount()
-            IP:SetDesc("👤 " .. Player.Name .. "\n🏠 Base: " .. (M.baseGUID or "Niet gevonden") .. "\n📦 Slots: " .. slotCount .. "\n😇 God: " .. (M._isGod and "AAN" or "UIT") .. "\n🎨 Thema: " .. (M.S.WallTheme or "Dark") .. "\n📍 Y: " .. curY)
+            IP:SetDesc("👤 " .. Player.Name .. "\n🏠 Base: " .. (M.baseGUID or "Niet gevonden") .. "\n📦 Slots: " .. slotCount .. "\n😇 God: " .. (M._isGod and "AAN" or "UIT") .. "\n🎨 Thema: " .. (M.S.WallTheme or "Dark") .. "\n📍 Y: " .. curY .. "\n🔎 Schaal: " .. math.floor(M.S.GuiScale * 100) .. "%")
         end)
     end
 end)
@@ -3406,11 +3531,11 @@ task.spawn(function()
     M.detectWallZ()
     local slotCount = M.getSlotCount()
     Fluent:Notify({
-        Title = "MzD Hub v12.3",
-        Content = "✅ Valentine: coins + station submit\n✅ Geen brainrots meer!\n✅ workspace.ValentinesCoinParts\n✅ workspace.ValentinesMap.CandyGramStation",
+        Title = "MzD Hub v12.5",
+        Content = "✅ CandyEventParts collector toegevoegd!\n✅ GUI Scale slider in Config tab\n✅ Valentine + Candy hearts gecombineerd",
         Duration = 8
     })
 end)
 
 W:SelectTab(1)
-print("[MzD Hub] v12.4 GELADEN")
+print("[MzD Hub] v12.5 GELADEN")
