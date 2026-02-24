@@ -2,9 +2,7 @@
 -- MzD Hub v13.0 — Module Loader (Delta-Safe)
 -- Loadstring - loadstring(game:HttpGet("https://raw.githubusercontent.com/mzdtools/EBFTTEST/main/Tsunami"))()
 -- ============================================
-
 local BASE_URL = "https://raw.githubusercontent.com/mzdtools/EBFTTEST/main/modules/"
-
 local moduleNames = {
     "globals",
     "workspace_init",
@@ -23,6 +21,7 @@ local moduleNames = {
     "factory",
     "farming",
     "tower_trial",
+    "tower_trial_hud",   -- ← nieuw: floating HUD overlay
     "lucky_blocks",
     "money_collector",
     "auto_upgrade",
@@ -38,16 +37,13 @@ local moduleNames = {
     "etc",
     "etc2",
 }
-
 local Modules = {}
-
 -- Phase 1: Load all module tables with retry logic
 -- Delta sometimes has HttpGet delays/failures
 for _, name in ipairs(moduleNames) do
     local url = BASE_URL .. name .. ".lua"
     local result = nil
     local loaded = false
-
     for attempt = 1, 3 do
         local ok, res = pcall(function()
             local source = game:HttpGet(url)
@@ -60,7 +56,6 @@ for _, name in ipairs(moduleNames) do
             end
             return loadstring(source)()
         end)
-
         if ok and res then
             result = res
             loaded = true
@@ -70,7 +65,6 @@ for _, name in ipairs(moduleNames) do
             task.wait(1) -- wait before retry
         end
     end
-
     if loaded and result then
         Modules[name] = result
     else
@@ -78,7 +72,6 @@ for _, name in ipairs(moduleNames) do
         Modules[name] = { init = function() end }
     end
 end
-
 -- Phase 2: Initialize modules in order
 for _, name in ipairs(moduleNames) do
     if name ~= "globals" then
@@ -93,5 +86,4 @@ for _, name in ipairs(moduleNames) do
         end
     end
 end
-
 print("[MzD Hub] All modules loaded successfully.")
