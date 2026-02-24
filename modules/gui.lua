@@ -149,7 +149,7 @@ function M.init(Modules)
 
     -- ========== FACTORY TAB ==========
     local FCT = W:AddTab({Title = "Factory", Icon = "factory"})
-    FCT:AddParagraph({Title = "🏭 Factory Info", Content = "Pakt ALLE brainrots van de geselecteerde rarity\nuit je backpack en maakt ze zo snel mogelijk max.\nHigh rarities (Celestial/Divine/Infinity) worden\nalleen geplaatst, niet geupgraded."})
+    FCT:AddParagraph({Title = "🏭 Factory Info", Content = "Pakt ALLE brainrots van de geselecteerde rarity\nuit je backpack en maakt ze zo snel mogelijk max.\nStel 'Any' in om alle rarities te verwerken."})
     FCT:AddDropdown("FactoryRarity",   {Title = "⭐ Rarity",   Values = RAR, Default = MzD.S.FactoryRarity,   Multi = false}):OnChanged(function(v) MzD.S.FactoryRarity = v end)
     FCT:AddDropdown("FactoryMutation", {Title = "💎 Mutatie",  Values = MUT, Default = MzD.S.FactoryMutation, Multi = false}):OnChanged(function(v) MzD.S.FactoryMutation = v end)
     FCT:AddDropdown("FactorySlot",     {Title = "📦 Werkslot", Values = SL,  Default = MzD.S.FactorySlot,     Multi = false}):OnChanged(function(v) MzD.S.FactorySlot = v end)
