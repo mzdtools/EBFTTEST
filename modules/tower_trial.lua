@@ -1,7 +1,8 @@
 -- ============================================
 -- [MODULE 17] TOWER TRIAL FARM — v18 logica
 -- Fixes: startParent check, pickup succes OR-conditie,
---        safeUnequip altijd na submit, HUD waitStart loop
+--        safeUnequip altijd na submit, HUD waitStart loop,
+--        safePathTo voor submit (langs muur, niet rechtdoor)
 -- ============================================
 
 local M = {}
@@ -53,7 +54,7 @@ function M.init(Modules)
         return nil
     end
 
-    -- nil-check op fireproximityprompt (niet alle executors hebben dit)
+    -- nil-check op fireproximityprompt
     local function trialFirePrompts(targetModel)
         if not targetModel then return end
         for _, d in pairs(targetModel:GetDescendants()) do
@@ -200,8 +201,8 @@ function M.init(Modules)
                             twait(3) return
                         end
                         MzD.Status.towerTrial = "🏃 Naar tower..."
-                        if MzD._isGod then MzD.safePathTo(tower:GetPivot() * CFrame.new(0,3,0))
-                        else MzD.tweenTo(tower:GetPivot() * CFrame.new(0,3,0)) end
+                        -- Altijd via corridor naar tower
+                        MzD.safePathTo(tower:GetPivot() * CFrame.new(0,3,0))
 
                         for i = 1, 15 do
                             if not MzD._towerTrialEnabled then break end
@@ -272,22 +273,21 @@ function M.init(Modules)
                         end
 
                         local entry       = list[1]
-                        local startParent = entry.b.Parent        -- FIX: parent bijhouden
+                        local startParent = entry.b.Parent
                         local startTools  = trialGetToolCount()
                         MzD.Status.towerTrial = "🧠 Ophalen " .. required .. " (" .. mfloor(entry.dist) .. "m)"
-                        if MzD._isGod then MzD.safePathTo(entry.root.CFrame * CFrame.new(0,3,0))
-                        else MzD.tweenTo(entry.root.CFrame * CFrame.new(0,3,0)) end
+                        -- Naar brainrot via corridor
+                        MzD.safePathTo(entry.root.CFrame * CFrame.new(0,3,0))
 
                         for attempt = 1, 6 do
                             if not MzD._towerTrialEnabled then break end
-                            if not entry.b or entry.b.Parent ~= startParent then break end  -- FIX: verdween = opgepakt, stop loop
+                            if not entry.b or entry.b.Parent ~= startParent then break end
                             if trialGetToolCount() > startTools then break end
                             MzD.forceGrabPrompt(entry.root)
                             MzD.forceGrabPrompt(entry.b)
                             twait(0.3)
                         end
 
-                        -- FIX: succes = toolcount gestegen OF brainrot verdween uit folder
                         if trialGetToolCount() > startTools or (entry.b and entry.b.Parent ~= startParent) then
                             depBeforeTrip = cur
                             state = "SUBMIT"
@@ -302,9 +302,10 @@ function M.init(Modules)
                         trips += 1
                         local tower = getTowerForTrial()
                         if not tower then state = "COLLECT" return end
-                        MzD.Status.towerTrial = "📦 Submit #" .. trips
-                        if MzD._isGod then MzD.safePathTo(tower:GetPivot() * CFrame.new(0,3,0))
-                        else MzD.tweenTo(tower:GetPivot() * CFrame.new(0,3,0)) end
+                        MzD.Status.towerTrial = "📦 Submit #" .. trips .. " → tower via corridor"
+
+                        -- FIX: safePathTo ipv tweenTo zodat hij langs de muur gaat
+                        MzD.safePathTo(tower:GetPivot() * CFrame.new(0,3,0))
 
                         local t0        = tick()
                         local deposited = false
@@ -320,7 +321,7 @@ function M.init(Modules)
                         end
 
                         if deposited then
-                            -- FIX: wacht op HUD-bevestiging zoals standalone
+                            -- Wacht op HUD bevestiging
                             local waitStart = tick()
                             local cur2, _  = trialGetDeposits()
                             while cur2 <= depBeforeTrip and (tick() - waitStart) < 6 do
@@ -332,13 +333,17 @@ function M.init(Modules)
                             MzD.Status.towerTrial = "⚠️ Submit mislukt"
                         end
 
-                        MzD.safeUnequip()   -- FIX: altijd unequippen, ook bij mislukking
+                        MzD.safeUnequip()
                         state = "COLLECT"
                         return
                     end
 
                     -- ── STATE: COOLDOWN ──────────────────────────────
                     if state == "COOLDOWN" then
+                        -- Terugkeren naar base via corridor
+                        MzD.Status.towerTrial = "🏠 Terugkeren naar base..."
+                        MzD.safeReturnToBase()
+
                         local remaining = MzD.S.TowerTrialFallbackCd
                         while MzD._towerTrialEnabled do
                             trialKillPopups()
