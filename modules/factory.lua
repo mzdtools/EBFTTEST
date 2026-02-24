@@ -1,12 +1,12 @@
 -- ============================================
--- [MODULE 15] FACTORY LOOP — VOLLEDIG HERSCHREVEN
--- FIXED: Pakt alle brainrots uit backpack van de
---        geselecteerde rarity. Per brainrot:
---        1. Equip → Place op werkslot
---        2. Max upgraden zo snel mogelijk
---        3. PickUp → Unequip
---        Herhaal voor elke brainrot. Werkt voor
---        ALLE rarities inclusief high rarities.
+-- [MODULE 15] FACTORY LOOP
+-- Pakt alle brainrots uit backpack van de
+-- geselecteerde rarity. Per brainrot:
+--   1. tweenToSlot → Equip → Place op werkslot
+--   2. Max upgraden zo snel mogelijk
+--   3. PickUp → Unequip
+-- Herhaal voor elke brainrot in backpack.
+-- Werkt voor ALLE rarities.
 -- ============================================
 
 local M = {}
@@ -49,29 +49,30 @@ function M.init(Modules)
         return true
     end
 
-    -- Verzamel ALLE matching tools uit backpack + equipped
-    local function getAllFactoryTools()
-        local tools = {}
+    -- FIX: Haal LIVE de volgende matching tool op uit backpack (geen stale lijst)
+    local function getNextFactoryTool()
         local bp = Player:FindFirstChild("Backpack")
         if bp then
             for _, t in pairs(bp:GetChildren()) do
-                if t:IsA("Tool") and factoryToolMatchesRarity(t) then tinsert(tools, t) end
+                if t:IsA("Tool") and factoryToolMatchesRarity(t) then return t end
             end
         end
+        -- Ook kijken of er iets equipped is
         if Player.Character then
             local eq = Player.Character:FindFirstChildWhichIsA("Tool")
-            if eq and factoryToolMatchesRarity(eq) then tinsert(tools, eq) end
+            if eq and factoryToolMatchesRarity(eq) then return eq end
         end
-        return tools
+        return nil
     end
 
     function MzD.startFactoryLoop()
         if MzD.factoryThread then return end
-        MzD.S.FactoryEnabled  = true
+        MzD.S.FactoryEnabled   = true
         MzD.Status.factoryCount = 0
 
         MzD.factoryThread = tspawn(function()
             local stopReason = "Idle"
+
             while MzD.S.FactoryEnabled do
                 local ok, err = pcall(function()
                     if not MzD.baseGUID then MzD.findBase() end
@@ -79,120 +80,106 @@ function M.init(Modules)
 
                     local ws = tonumber(MzD.S.FactorySlot) or 5
 
-                    -- Leeg de werkslot eerst als die bezet is
+                    -- Leeg werkslot als bezet
                     if not MzD.isSlotEmpty(ws) then
+                        MzD.tweenToSlot(ws) twait(0.3)   -- FIX: eerst naar slot
                         MzD.pickUpBrainrot(ws) twait(1.0)
                         MzD.safeUnequip() twait(0.4)
                     end
 
-                    -- Haal alle matching tools op uit backpack
-                    local tools = getAllFactoryTools()
+                    -- FIX: Haal live de volgende tool op, geen stale lijst
+                    local tool = getNextFactoryTool()
 
-                    if #tools == 0 then
+                    if not tool then
                         stopReason = "Klaar! (geen tools meer)"
                         MzD.S.FactoryEnabled = false
                         return
                     end
 
-                    -- Verwerk elke tool één voor één
-                    for i = 1, #tools do
-                        if not MzD.S.FactoryEnabled then break end
+                    local bName   = tool:GetAttribute("BrainrotName") or "Item"
+                    local tRar    = tool:GetAttribute("Rarity") or ""
+                    local isHighT = MzD.isHighRarity(tRar)
 
-                        local tool = tools[i]
-                        -- Verifieer dat de tool nog bestaat en in backpack/char zit
-                        if not tool or not tool.Parent then
-                            -- Tool verdwenen, skip
-                        else
-                            local bName   = tool:GetAttribute("BrainrotName") or "Item"
-                            local tRar    = tool:GetAttribute("Rarity") or ""
-                            local isHighT = MzD.isHighRarity(tRar)
+                    MzD.Status.factory = "🔧 " .. bName .. (isHighT and " ★" or "")
 
-                            MzD.Status.factory = "🔧 " .. bName .. (isHighT and " ★" or "")
+                    -- FIX: Naar slot tweenen VOOR equip + place
+                    MzD.tweenToSlot(ws) twait(0.3)
 
-                            -- Zorg dat slot leeg is voor we plaatsen
-                            if not MzD.isSlotEmpty(ws) then
-                                MzD.pickUpBrainrot(ws) twait(1.0) MzD.safeUnequip() twait(0.4)
-                            end
+                    -- Equip de tool
+                    local hum = Player.Character and Player.Character:FindFirstChild("Humanoid")
+                    if hum then
+                        pcall(function() hum:EquipTool(tool) end)
+                        twait(0.5)
+                    end
 
-                            -- Equip de tool
-                            local hum = Player.Character and Player.Character:FindFirstChild("Humanoid")
-                            if hum then
-                                pcall(function() hum:EquipTool(tool) end)
-                                twait(0.5)
-                            end
-
-                            -- Controleer of tool nu equipped is
-                            local equippedOk = false
-                            if Player.Character then
-                                local eq = Player.Character:FindFirstChildWhichIsA("Tool")
-                                equippedOk = eq ~= nil
-                            end
-
-                            if not equippedOk then
-                                -- Equip mislukt, probeer via backpack lookup
-                                local bp = Player:FindFirstChild("Backpack")
-                                if bp then
-                                    for _, t in pairs(bp:GetChildren()) do
-                                        if t == tool and hum then
-                                            pcall(function() hum:EquipTool(t) end)
-                                            twait(0.5) break
-                                        end
-                                    end
+                    -- Fallback equip als eerste poging mislukte
+                    local equippedOk = Player.Character and Player.Character:FindFirstChildWhichIsA("Tool") ~= nil
+                    if not equippedOk then
+                        local bp = Player:FindFirstChild("Backpack")
+                        if bp and hum then
+                            for _, t in pairs(bp:GetChildren()) do
+                                if t == tool then
+                                    pcall(function() hum:EquipTool(t) end)
+                                    twait(0.5) break
                                 end
                             end
+                        end
+                    end
 
-                            -- Plaats op werkslot
-                            MzD.placeBrainrot(ws) twait(0.8)
+                    -- Plaats op werkslot
+                    MzD.placeBrainrot(ws) twait(0.8)
 
-                            if MzD.isSlotEmpty(ws) then
-                                -- Plaatsen mislukt, unequip en naar volgende
-                                pcall(function() if hum then hum:UnequipTools() end end)
-                                twait(0.3)
-                            else
-                                -- Max upgraden (skip voor high rarities)
-                                if not isHighT then
-                                    local mb  = workspace:FindFirstChild("Bases") and workspace.Bases:FindFirstChild(MzD.baseGUID)
-                                    local sm2 = mb and mb:FindFirstChild("slot "..ws.." brainrot")
-                                    if sm2 then
-                                        local cur, fails = tonumber(sm2:GetAttribute("Level")) or 0, 0
-                                        while cur < MzD.S.FactoryMaxLevel and MzD.S.FactoryEnabled do
-                                            MzD.upgradeBrainrot(ws)
-                                            twait(0.05) -- zo snel mogelijk
-                                            local nw = tonumber(sm2:GetAttribute("Level")) or cur
-                                            if nw > cur then
-                                                fails = 0
-                                                cur   = nw
-                                                MzD.Status.factory = bName .. " Lv." .. cur .. "/" .. MzD.S.FactoryMaxLevel
-                                            else
-                                                fails += 1
-                                                if fails > 80 then
-                                                    stopReason = "Geld op!"
-                                                    MzD.S.FactoryEnabled = false
-                                                    break
-                                                end
-                                            end
-                                        end
-                                    end
+                    if MzD.isSlotEmpty(ws) then
+                        -- Plaatsen mislukt, unequip en volgende cyclus proberen
+                        MzD.safeUnequip() twait(0.3)
+                        return
+                    end
+
+                    -- Max upgraden (skip voor high rarities)
+                    if not isHighT then
+                        local mb  = workspace:FindFirstChild("Bases") and workspace.Bases:FindFirstChild(MzD.baseGUID)
+                        local sm2 = mb and mb:FindFirstChild("slot " .. ws .. " brainrot")
+                        if sm2 then
+                            local cur, fails = tonumber(sm2:GetAttribute("Level")) or 0, 0
+                            while cur < MzD.S.FactoryMaxLevel and MzD.S.FactoryEnabled do
+                                MzD.upgradeBrainrot(ws)
+                                twait(0.05)
+                                local nw = tonumber(sm2:GetAttribute("Level")) or cur
+                                if nw > cur then
+                                    fails = 0
+                                    cur   = nw
+                                    MzD.Status.factory = bName .. " Lv." .. cur .. "/" .. MzD.S.FactoryMaxLevel
                                 else
-                                    MzD.Status.factory = "★ " .. tRar .. ": " .. bName .. " (gezet)"
-                                    twait(0.5)
-                                end
-
-                                if MzD.S.FactoryEnabled then
-                                    -- Oppakken van slot
-                                    MzD.pickUpBrainrot(ws) twait(1.0)
-                                    MzD.Status.factoryCount += 1
-                                    pcall(function() if hum then hum:UnequipTools() end end)
-                                    twait(0.3)
-                                    MzD.Status.factory = (isHighT and "★ Done " or "Done ") .. bName .. " (#" .. MzD.Status.factoryCount .. ")"
+                                    fails += 1
+                                    if fails > 80 then
+                                        stopReason = "Geld op!"
+                                        MzD.S.FactoryEnabled = false
+                                        break
+                                    end
                                 end
                             end
-                        end -- tool.Parent check
-                    end -- for tools
+                        end
+                    else
+                        MzD.Status.factory = "★ " .. tRar .. ": " .. bName .. " (gezet)"
+                        twait(0.5)
+                    end
+
+                    -- Oppakken van slot → backpack
+                    if MzD.S.FactoryEnabled then
+                        MzD.pickUpBrainrot(ws) twait(1.0)
+                        MzD.Status.factoryCount += 1
+                        MzD.safeUnequip() twait(0.3)
+                        MzD.Status.factory = (isHighT and "★ Done " or "Done ") .. bName .. " (#" .. MzD.Status.factoryCount .. ")"
+                    end
                 end)
-                if not ok then twait(1) end
+
+                if not ok then
+                    MzD.Status.factory = "❌ " .. tostring(err):sub(1, 50)
+                    twait(1)
+                end
                 if MzD.S.FactoryEnabled then twait(0.1) end
             end
+
             MzD.Status.factory = stopReason
             MzD.factoryThread  = nil
         end)
@@ -202,7 +189,7 @@ function M.init(Modules)
         MzD.S.FactoryEnabled = false
         if MzD.factoryThread then pcall(tcancel, MzD.factoryThread) MzD.factoryThread = nil end
         local f = MzD.Status.factory or ""
-        if not (sfind(f,"Done") or sfind(f,"Klaar") or sfind(f,"Geld op")) then
+        if not (sfind(f, "Done") or sfind(f, "Klaar") or sfind(f, "Geld op")) then
             MzD.Status.factory = "Idle"
         end
     end
