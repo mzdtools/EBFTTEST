@@ -1,5 +1,9 @@
 -- ============================================
 -- [MODULE 16] FARMING LOOP
+-- Modes:
+--   "Collect"           → ophalen → base → backpack
+--   "Collect,Place&Max" → ophalen → base → plaatsen → max upgraden → oppakken → backpack
+--   (default)           → normale farm loop (spawn → place → upgrade → pickup)
 -- ============================================
 
 local M = {}
@@ -59,7 +63,6 @@ function M.init(Modules)
                                                 else break end
                                             end
                                             MzD.safeUnequip() twait(0.1)
-                                            -- ★ FIX: Return to base after each collect
                                             MzD.Status.farm = "Terugkeren..."
                                             if MzD._isGod then MzD.safeReturnToBase() else MzD.returnToBase() end
                                         end
@@ -73,23 +76,116 @@ function M.init(Modules)
                     -- ═══════════════════════════════════════════
                     -- MODE: Collect, Place & Max
                     -- ═══════════════════════════════════════════
+                    if MzD.S.FarmMode == "Collect,Place&Max" then
+                        -- Start elke cyclus bij base
+                        MzD.Status.farm = "Naar base..."
+                        if MzD._isGod then MzD.safeReturnToBase() else MzD.returnToBase() end
+                        twait(0.2)
 
-                    -- ★ FIX: Always start each cycle at base
-                    MzD.Status.farm = "Naar base..."
-                    if MzD._isGod then MzD.safeReturnToBase() else MzD.returnToBase() end
-                    twait(0.2)
+                        -- Slot leegmaken als bezet
+                        if not MzD.isSlotEmpty(ws) then MzD.pickUpBrainrot(ws) twait(0.5) MzD.safeUnequip() twait(0.3) end
 
-                    -- Clear work slot if occupied
+                        -- Kijk of er al een tool in backpack zit
+                        local tool = MzD.findTargetToolInBackpack()
+                        if tool and MzD.isHighRarityTool(tool) then
+                            MzD.Status.farm = "High "..(tool:GetAttribute("Rarity") or "High")
+                            MzD.Status.farmCount += 1 twait(0.5) tool = nil
+                        end
+
+                        -- Geen tool → ophalen van de map
+                        if not tool then
+                            local found = false
+                            if not MzD.ActiveBrainrots then MzD.ActiveBrainrots = workspace:FindFirstChild("ActiveBrainrots") end
+                            if MzD.ActiveBrainrots then
+                                for _, folder in pairs(MzD.ActiveBrainrots:GetChildren()) do
+                                    if not MzD.S.Farming then break end
+                                    if folder:IsA("Folder") and MzD.rarityMatches(folder.Name) then
+                                        for _, b in pairs(folder:GetChildren()) do
+                                            if not MzD.S.Farming or MzD.isDead() then break end
+                                            if MzD.matchesFilter(b, folder.Name) then
+                                                local root = MzD.findBrainrotRoot(b) if not root then continue end
+                                                found = true
+                                                MzD.Status.farm = "Ophalen "..folder.Name
+                                                if MzD._isGod then MzD.safePathTo(root.CFrame * CFrame.new(0,3,0))
+                                                else MzD.tweenTo(root.CFrame * CFrame.new(0,3,0)) end
+                                                for attempt = 1, 5 do
+                                                    if not MzD.S.Farming then break end
+                                                    if MzD.isDead() then
+                                                        MzD.waitForRespawn() twait(1) MzD.setHomePosition()
+                                                        if not MzD.S.Farming then break end
+                                                        if root and root.Parent then
+                                                            if MzD._isGod then MzD.safePathTo(root.CFrame * CFrame.new(0,3,0))
+                                                            else MzD.tweenTo(root.CFrame * CFrame.new(0,3,0)) end
+                                                        else found = false break end
+                                                    end
+                                                    if root and root.Parent then
+                                                        MzD.forceGrabPrompt(root) MzD.forceGrabPrompt(b)
+                                                        twait(0.3) MzD.Status.farmCount += 1 break
+                                                    else found = false break end
+                                                end
+                                                MzD.safeUnequip() twait(0.1)
+                                                -- Terugkeren naar base na ophalen
+                                                MzD.Status.farm = "Terugkeren naar base..."
+                                                if MzD._isGod then MzD.safeReturnToBase() else MzD.returnToBase() end
+                                                twait(0.2)
+                                                break
+                                            end
+                                        end
+                                    end
+                                    if found then break end
+                                end
+                            end
+                            if not found then MzD.Status.farm = "Wachten..." twait(2) return end
+                            twait(0.3)
+                            tool = MzD.findTargetToolInBackpack()
+                            if not tool then twait(1) return end
+                        end
+
+                        -- High rarity skip
+                        if MzD.isHighRarityTool(tool) then MzD.Status.farm = "High" MzD.Status.farmCount += 1 twait(0.5) return end
+
+                        -- Plaatsen, upgraden, oppakken
+                        local bName = tool:GetAttribute("BrainrotName") or "Brainrot"
+                        MzD.Status.farm = "Plaatsen "..bName.."..."
+                        MzD.tweenToSlot(ws) twait(0.3)
+                        MzD.safeEquip(tool) twait(0.5)
+                        MzD.placeBrainrot(ws) twait(0.8)
+                        if MzD.isSlotEmpty(ws) then MzD.safeUnequip() twait(1) return end
+
+                        -- Upgraden tot max
+                        local mb  = workspace:FindFirstChild("Bases") and workspace.Bases:FindFirstChild(MzD.baseGUID)
+                        local sm2 = mb and mb:FindFirstChild("slot "..ws.." brainrot")
+                        if sm2 then
+                            local cur, fails = tonumber(sm2:GetAttribute("Level")) or 0, 0
+                            while cur < MzD.S.MaxLevel and MzD.S.Farming do
+                                MzD.upgradeBrainrot(ws) twait(0.15)
+                                local nw = tonumber(sm2:GetAttribute("Level")) or cur
+                                if nw > cur then fails = 0 cur = nw MzD.Status.upgradeCount += 1 MzD.Status.farm = bName.." Lv."..cur.."/"..MzD.S.MaxLevel
+                                else fails += 1 if fails > 60 then break end end
+                            end
+                        end
+
+                        -- Oppakken → backpack
+                        twait(0.3)
+                        MzD.pickUpBrainrot(ws) twait(0.8) MzD.safeUnequip() twait(0.3)
+                        if not MzD.isSlotEmpty(ws) then MzD.pickUpBrainrot(ws) twait(0.5) MzD.safeUnequip() twait(0.3) end
+
+                        -- Terugkeren na volledige cyclus
+                        MzD.Status.farm = "Cyclus klaar, terugkeren..."
+                        if MzD._isGod then MzD.safeReturnToBase() else MzD.returnToBase() end
+                        twait(0.2)
+                        return
+                    end
+
+                    -- ═══════════════════════════════════════════
+                    -- MODE: Normaal (default)
+                    -- ═══════════════════════════════════════════
                     if not MzD.isSlotEmpty(ws) then MzD.pickUpBrainrot(ws) twait(0.5) MzD.safeUnequip() twait(0.3) end
-
-                    -- Check backpack first
                     local tool = MzD.findTargetToolInBackpack()
                     if tool and MzD.isHighRarityTool(tool) then
                         MzD.Status.farm = "High "..(tool:GetAttribute("Rarity") or "High")
                         MzD.Status.farmCount += 1 twait(0.5) tool = nil
                     end
-
-                    -- If no tool in backpack, go collect one
                     if not tool then
                         local found = false
                         if not MzD.ActiveBrainrots then MzD.ActiveBrainrots = workspace:FindFirstChild("ActiveBrainrots") end
@@ -121,11 +217,7 @@ function M.init(Modules)
                                                 else found = false break end
                                             end
                                             MzD.safeUnequip() twait(0.1)
-
-                                            -- ★ FIX: Return to base after collecting
-                                            MzD.Status.farm = "Terugkeren naar base..."
                                             if MzD._isGod then MzD.safeReturnToBase() else MzD.returnToBase() end
-                                            twait(0.2)
                                             break
                                         end
                                     end
@@ -138,21 +230,12 @@ function M.init(Modules)
                         tool = MzD.findTargetToolInBackpack()
                         if not tool then twait(1) return end
                     end
-
-                    -- High rarity skip
                     if MzD.isHighRarityTool(tool) then MzD.Status.farm = "High" MzD.Status.farmCount += 1 twait(0.5) return end
-
-                    -- Place, upgrade, pickup cycle
                     local bName = tool:GetAttribute("BrainrotName") or "Brainrot"
-
-                    -- ★ FIX: Make sure we're at base before placing
-                    MzD.Status.farm = "Plaatsen " .. bName .. "..."
                     MzD.tweenToSlot(ws) twait(0.3)
                     MzD.safeEquip(tool) twait(0.5)
                     MzD.placeBrainrot(ws) twait(0.8)
                     if MzD.isSlotEmpty(ws) then MzD.safeUnequip() twait(1) return end
-
-                    -- Upgrade to max
                     local mb  = workspace:FindFirstChild("Bases") and workspace.Bases:FindFirstChild(MzD.baseGUID)
                     local sm2 = mb and mb:FindFirstChild("slot "..ws.." brainrot")
                     if sm2 then
@@ -164,17 +247,9 @@ function M.init(Modules)
                             else fails += 1 if fails > 60 then break end end
                         end
                     end
-
-                    -- Pickup after maxing
                     twait(0.3)
                     MzD.pickUpBrainrot(ws) twait(0.8) MzD.safeUnequip() twait(0.3)
                     if not MzD.isSlotEmpty(ws) then MzD.pickUpBrainrot(ws) twait(0.5) MzD.safeUnequip() twait(0.3) end
-
-                    -- ★ FIX: Return to base after completing the full cycle
-                    MzD.Status.farm = "Cyclus klaar, terugkeren..."
-                    if MzD._isGod then MzD.safeReturnToBase() else MzD.returnToBase() end
-                    twait(0.2)
-
                 end)
                 if not ok then twait(1) end
                 twait(0.3)
