@@ -88,9 +88,9 @@ function M.init(Modules)
         MzD.S.SelectedBrainrots = s
     end)
 
-    FT:AddDropdown("FarmMutation", {Title = "💎 Mutatie",   Values = MUT, Default = "None",        Multi = false}):OnChanged(function(v) MzD.S.TargetMutation = v end)
-    FT:AddDropdown("FarmMode",     {Title = "⚙️ Mode",      Values = FM,  Default = MzD.S.FarmMode,  Multi = false}):OnChanged(function(v) MzD.S.FarmMode = v end)
-    FT:AddDropdown("FarmSlot",     {Title = "📦 Slot",      Values = SL,  Default = MzD.S.FarmSlot,  Multi = false}):OnChanged(function(v) MzD.S.FarmSlot = v end)
+    FT:AddDropdown("FarmMutation", {Title = "💎 Mutatie",   Values = MUT, Default = "None",           Multi = false}):OnChanged(function(v) MzD.S.TargetMutation = v end)
+    FT:AddDropdown("FarmMode",     {Title = "⚙️ Mode",      Values = FM,  Default = MzD.S.FarmMode,   Multi = false}):OnChanged(function(v) MzD.S.FarmMode = v end)
+    FT:AddDropdown("FarmSlot",     {Title = "📦 Slot",      Values = SL,  Default = MzD.S.FarmSlot,   Multi = false}):OnChanged(function(v) MzD.S.FarmSlot = v end)
     FT:AddSlider("FarmMaxLevel",   {Title = "📈 Max Level", Default = MzD.S.MaxLevel, Min = 1, Max = 500, Rounding = 0}):OnChanged(function(v) MzD.S.MaxLevel = mfloor(v) end)
 
     local FSP = FT:AddParagraph({Title = "📊 Farm Status", Content = "Idle"})
@@ -104,12 +104,12 @@ function M.init(Modules)
         local s = {} for n, on in pairs(v) do if on then tinsert(s, n) end end
         if #s == 0 then s = {"Common"} end MzD.S.LuckyBlockRarity = s
     end)
-    FT:AddDropdown("LBMutation", {Title = "💎 LB Mutatie", Values = MUT, Default = "Any",     Multi = false}):OnChanged(function(v) MzD.S.LuckyBlockMutation = v end)
-    local LBSP = FT:AddParagraph({Title = "🎲 LB Status",  Content = "Idle"})
+    FT:AddDropdown("LBMutation", {Title = "💎 LB Mutatie", Values = MUT, Default = "Any", Multi = false}):OnChanged(function(v) MzD.S.LuckyBlockMutation = v end)
+    local LBSP = FT:AddParagraph({Title = "🎲 LB Status", Content = "Idle"})
     local LBTG = FT:AddToggle("LBToggle", {Title = "🎲 Auto Lucky Blocks", Default = false})
     LBTG:OnChanged(function(v) if v then MzD.findBase() MzD.startLuckyBlockFarm() else MzD.stopLuckyBlockFarm() end end)
 
-    -- Tower Trial Farm (geïntegreerd in Farm Tab)
+    -- Tower Trial Farm
     FT:AddParagraph({Title = "🏆 Tower Trial Farm", Content = "Auto trial activeren, brainrots ophalen\nen depositen tot het klaar is. Wacht cooldown af.\nGebruikt God Mode beweging als dat aan staat."})
     FT:AddDropdown("TowerTrialSlot", {Title = "📦 Werkslot (referentie)", Values = SL, Default = "5", Multi = false}):OnChanged(function(v)
         MzD.S.TowerTrialSlot = v
@@ -118,7 +118,7 @@ function M.init(Modules)
         MzD.S.TowerTrialFallbackCd = mfloor(v)
     end)
 
-    -- Walk Y fine-tune knoppen (uit v18)
+    -- Walk Y fine-tune
     FT:AddParagraph({Title = "🚶 Walk Y Fine-tune", Content = "Pas Walk Y aan zonder God Mode uit te zetten"})
     FT:AddButton({Title = "Walk Y  −3", Callback = function()
         MzD.S.GodWalkY = (MzD.S.GodWalkY or 0) - 3
@@ -153,7 +153,7 @@ function M.init(Modules)
     FCT:AddDropdown("FactoryRarity",   {Title = "⭐ Rarity",   Values = RAR, Default = MzD.S.FactoryRarity,   Multi = false}):OnChanged(function(v) MzD.S.FactoryRarity = v end)
     FCT:AddDropdown("FactoryMutation", {Title = "💎 Mutatie",  Values = MUT, Default = MzD.S.FactoryMutation, Multi = false}):OnChanged(function(v) MzD.S.FactoryMutation = v end)
     FCT:AddDropdown("FactorySlot",     {Title = "📦 Werkslot", Values = SL,  Default = MzD.S.FactorySlot,     Multi = false}):OnChanged(function(v) MzD.S.FactorySlot = v end)
-    FCT:AddSlider("FactoryMaxLevel",   {Title = "📈 Max Level", Description = "Niet van toepassing op High rarities", Default = MzD.S.FactoryMaxLevel, Min = 1, Max = 500, Rounding = 0}):OnChanged(function(v) MzD.S.FactoryMaxLevel = mfloor(v) end)
+    FCT:AddSlider("FactoryMaxLevel",   {Title = "📈 Max Level", Default = MzD.S.FactoryMaxLevel, Min = 1, Max = 500, Rounding = 0}):OnChanged(function(v) MzD.S.FactoryMaxLevel = mfloor(v) end)
     local FCSP = FCT:AddParagraph({Title = "📊 Factory Status", Content = "Idle"})
     local FCTG = FCT:AddToggle("FactoryToggle", {Title = "🏭 Start Factory", Default = false})
     FCTG:OnChanged(function(v)
@@ -257,28 +257,24 @@ function M.init(Modules)
     -- ========== CONFIG TAB ==========
     local CT = W:AddTab({Title = "Config", Icon = "settings"})
 
-    CT:AddDropdown("TweenSpeed",   {Title = "🏃 Farm Speed",     Values = SPD,    Default = "INSTANT", Multi = false}):OnChanged(function(v) MzD.S.TweenSpeed   = SPM[v] or 9999 end)
-    CT:AddDropdown("CorridorSpeed",{Title = "🛤️ Corridor Speed", Values = CSPD,   Default = "1500",    Multi = false}):OnChanged(function(v) MzD.S.CorridorSpeed = tonumber(v) or 1500 end)
-    CT:AddDropdown("WallTheme",    {Title = "🎨 Thema",          Values = THEMES, Default = "Auto",    Multi = false}):OnChanged(function(v)
+    CT:AddDropdown("TweenSpeed",    {Title = "🏃 Farm Speed",     Values = SPD,    Default = "INSTANT", Multi = false}):OnChanged(function(v) MzD.S.TweenSpeed    = SPM[v] or 9999 end)
+    CT:AddDropdown("CorridorSpeed", {Title = "🛤️ Corridor Speed", Values = CSPD,   Default = "1500",    Multi = false}):OnChanged(function(v) MzD.S.CorridorSpeed = tonumber(v) or 1500 end)
+    CT:AddDropdown("WallTheme",     {Title = "🎨 Thema",          Values = THEMES, Default = "Auto",    Multi = false}):OnChanged(function(v)
         MzD.S.WallTheme = v MzD._lastFixedMapName = ""
         pcall(function() MzD.mapRunFix() end)
         if MzD._isGod then MzD.disableGod() twait(0.3) MzD.enableGod() end
     end)
 
-    -- GUI Scale — werkende implementatie
-    local _fluentRootFrame = nil
-    local function findFluentRoot()
-        if _fluentRootFrame and _fluentRootFrame.Parent then return _fluentRootFrame end
+    -- GUI Scale — lazy lookup, zoekt Fluent root frame pas als slider bewogen wordt
+    local _fluentGui = nil
+    local function findFluentGui()
+        if _fluentGui and _fluentGui.Parent then return _fluentGui end
         for _, gui in pairs(Player.PlayerGui:GetChildren()) do
             if gui:IsA("ScreenGui") then
                 for _, child in pairs(gui:GetChildren()) do
-                    if child:IsA("Frame") and child.Size.X.Offset > 300 then
-                        for _, d in pairs(child:GetDescendants()) do
-                            if d:IsA("TextLabel") and d.Text == "MzD Hub" then
-                                _fluentRootFrame = child
-                                return child
-                            end
-                        end
+                    if child:IsA("Frame") and child.Size.X.Offset > 300 and child.Size.Y.Offset > 300 then
+                        _fluentGui = child
+                        return child
                     end
                 end
             end
@@ -288,11 +284,18 @@ function M.init(Modules)
 
     CT:AddParagraph({Title = "🔎 GUI Schaal", Content = "50%–150% in stappen van 10%"})
     CT:AddSlider("GuiScale", {Title = "🔎 Schaal %", Default = 100, Min = 50, Max = 150, Rounding = 0}):OnChanged(function(v)
-        local step  = mfloor(v / 10 + 0.5) * 10
-        local scale = step / 100
+        local scale = mfloor(v / 10 + 0.5) * 10 / 100
         MzD.S.GuiScale = scale
         pcall(function()
-            local root = findFluentRoot()
+            local root = findFluentGui()
+            -- Fallback: loop door alle descendants als eerste poging mislukt
+            if not root then
+                for _, gui in pairs(Player.PlayerGui:GetDescendants()) do
+                    if gui:IsA("Frame") and gui.Size.X.Offset > 300 and gui.Size.Y.Offset > 300 then
+                        root = gui break
+                    end
+                end
+            end
             if not root then return end
             local uiScale = root:FindFirstChildOfClass("UIScale")
             if not uiScale then
@@ -327,8 +330,8 @@ function M.init(Modules)
         MzD.findBase() MzD.clearSlot(tonumber(MzD.S.FarmSlot) or 5)
         Fluent:Notify({Title="🗑️ Slot", Content="Slot "..MzD.S.FarmSlot.." geleegd", Duration=3})
     end})
-    CT:AddButton({Title = "🏠 Ga Naar Base",   Callback = function() MzD.findBase() MzD.returnToBase() end})
-    CT:AddButton({Title = "📡 Debug Info",     Callback = function()
+    CT:AddButton({Title = "🏠 Ga Naar Base", Callback = function() MzD.findBase() MzD.returnToBase() end})
+    CT:AddButton({Title = "📡 Debug Info",   Callback = function()
         local info = "God:"..(MzD._isGod and "AAN" or "UIT")
         info = info.."\nWalk:"..MzD.S.GodWalkY.." Floor:"..MzD.S.GodFloorY
         info = info.."\nDoom:"..(MzD.S.DoomEnabled and "AAN" or "UIT").." Parts:"..#MzD._doomCachedParts
