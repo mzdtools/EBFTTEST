@@ -2,7 +2,9 @@
 -- [MODULE 17] TOWER TRIAL FARM — v18 logica
 -- Fixes: startParent check, pickup succes OR-conditie,
 --        safeUnequip altijd na submit, HUD waitStart loop,
---        safePathTo voor submit (langs muur, niet rechtdoor)
+--        safePathTo voor submit (langs muur, niet rechtdoor),
+--        unstuck na claim via sideways escape + safeReturnToBase,
+--        safeUnequip pas op base (niet onder de tower)
 -- ============================================
 
 local M = {}
@@ -21,7 +23,6 @@ function M.init(Modules)
     local sformat = G.sformat
     local mfloor  = G.mfloor
 
-    -- Bewegingsstop helper
     local function haltMovement()
         local char = Player.Character if not char then return end
         local hrp  = char:FindFirstChild("HumanoidRootPart")
@@ -54,7 +55,6 @@ function M.init(Modules)
         return nil
     end
 
-    -- nil-check op fireproximityprompt
     local function trialFirePrompts(targetModel)
         if not targetModel then return end
         for _, d in pairs(targetModel:GetDescendants()) do
@@ -151,7 +151,6 @@ function M.init(Modules)
         return count
     end
 
-    -- findRoot met fallback
     local function trialFindRoot(b)
         if not b then return nil end
         if MzD.findBrainrotRoot then
@@ -165,6 +164,18 @@ function M.init(Modules)
         if b:IsA("Model") and b.PrimaryPart then return b.PrimaryPart end
         for _, d in pairs(b:GetDescendants()) do if d:IsA("BasePart") then return d end end
         return nil
+    end
+
+    -- FIX 1: Beweeg zijwaarts weg van de tower zodat safePathTo niet blokkeert
+    local function escapeFromTower(tower)
+        local ch  = Player.Character if not ch then return end
+        local hrp = ch:FindFirstChild("HumanoidRootPart") if not hrp then return end
+        local towerPos = tower:GetPivot().Position
+        local myPos    = hrp.Position
+        local escapeX  = myPos.X + (myPos.X >= towerPos.X and 14 or -14)
+        local SAFE_Y   = MzD._isGod and MzD.S.GodWalkY or (myPos.Y + 3)
+        MzD.fastTween(CFrame.new(escapeX, SAFE_Y, myPos.Z))
+        twait(0.15)
     end
 
     function MzD.startTowerTrial()
@@ -201,7 +212,6 @@ function M.init(Modules)
                             twait(3) return
                         end
                         MzD.Status.towerTrial = "🏃 Naar tower..."
-                        -- Altijd via corridor naar tower
                         MzD.safePathTo(tower:GetPivot() * CFrame.new(0,3,0))
 
                         for i = 1, 15 do
@@ -228,7 +238,6 @@ function M.init(Modules)
                         MzD.Status.towerTrial = "💝 " .. cur .. "/" .. goal .. " | Trips: " .. trips .. " | #" .. trialsDone
 
                         if cur >= goal then
-                            -- Claim
                             pcall(function()
                                 local rs     = game:GetService("ReplicatedStorage")
                                 local shared = rs:FindFirstChild("Shared")
@@ -242,11 +251,14 @@ function M.init(Modules)
                             trialsDone += 1
                             MzD.Status.towerTrialCount = trialsDone
                             MzD.Status.towerTrial = "🎉 Trial #" .. trialsDone .. " KLAAR!"
-                            MzD.safeUnequip()
+
+                            -- FIX 1: Eerst zijwaarts wegbewegen zodat safePathTo niet blokkeert
+                            local tower = getTowerForTrial()
+                            if tower then escapeFromTower(tower) end
+
                             state = "COOLDOWN" return
                         end
 
-                        -- Pak brainrot op
                         local activeBrainrots = workspace:FindFirstChild("ActiveBrainrots")
                         if not activeBrainrots then twait(2) return end
                         local required = trialGetRarity()
@@ -276,7 +288,6 @@ function M.init(Modules)
                         local startParent = entry.b.Parent
                         local startTools  = trialGetToolCount()
                         MzD.Status.towerTrial = "🧠 Ophalen " .. required .. " (" .. mfloor(entry.dist) .. "m)"
-                        -- Naar brainrot via corridor
                         MzD.safePathTo(entry.root.CFrame * CFrame.new(0,3,0))
 
                         for attempt = 1, 6 do
@@ -302,9 +313,7 @@ function M.init(Modules)
                         trips += 1
                         local tower = getTowerForTrial()
                         if not tower then state = "COLLECT" return end
-                        MzD.Status.towerTrial = "📦 Submit #" .. trips .. " → tower via corridor"
-
-                        -- FIX: safePathTo ipv tweenTo zodat hij langs de muur gaat
+                        MzD.Status.towerTrial = "📦 Submit #" .. trips
                         MzD.safePathTo(tower:GetPivot() * CFrame.new(0,3,0))
 
                         local t0        = tick()
@@ -314,14 +323,10 @@ function M.init(Modules)
                             trialFirePrompts(tower)
                             twait(0.4)
                             local cur2, _ = trialGetDeposits()
-                            if cur2 > depBeforeTrip then
-                                deposited = true
-                                break
-                            end
+                            if cur2 > depBeforeTrip then deposited = true break end
                         end
 
                         if deposited then
-                            -- Wacht op HUD bevestiging
                             local waitStart = tick()
                             local cur2, _  = trialGetDeposits()
                             while cur2 <= depBeforeTrip and (tick() - waitStart) < 6 do
@@ -340,9 +345,13 @@ function M.init(Modules)
 
                     -- ── STATE: COOLDOWN ──────────────────────────────
                     if state == "COOLDOWN" then
-                        -- Terugkeren naar base via corridor
+                        -- FIX 1: Via corridor terug naar base (niet rechtdoor/onder tower)
                         MzD.Status.towerTrial = "🏠 Terugkeren naar base..."
                         MzD.safeReturnToBase()
+
+                        -- FIX 2: Pas unequippen als we op base zijn → brainrot terug in backpack
+                        MzD.safeUnequip()
+                        twait(0.3)
 
                         local remaining = MzD.S.TowerTrialFallbackCd
                         while MzD._towerTrialEnabled do
