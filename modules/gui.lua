@@ -88,9 +88,9 @@ function M.init(Modules)
         MzD.S.SelectedBrainrots = s
     end)
 
-    FT:AddDropdown("FarmMutation", {Title = "💎 Mutatie",   Values = MUT, Default = "None",           Multi = false}):OnChanged(function(v) MzD.S.TargetMutation = v end)
-    FT:AddDropdown("FarmMode",     {Title = "⚙️ Mode",      Values = FM,  Default = MzD.S.FarmMode,   Multi = false}):OnChanged(function(v) MzD.S.FarmMode = v end)
-    FT:AddDropdown("FarmSlot",     {Title = "📦 Slot",      Values = SL,  Default = MzD.S.FarmSlot,   Multi = false}):OnChanged(function(v) MzD.S.FarmSlot = v end)
+    FT:AddDropdown("FarmMutation", {Title = "💎 Mutatie",   Values = MUT, Default = "None",          Multi = false}):OnChanged(function(v) MzD.S.TargetMutation = v end)
+    FT:AddDropdown("FarmMode",     {Title = "⚙️ Mode",      Values = FM,  Default = MzD.S.FarmMode,  Multi = false}):OnChanged(function(v) MzD.S.FarmMode = v end)
+    FT:AddDropdown("FarmSlot",     {Title = "📦 Slot",      Values = SL,  Default = MzD.S.FarmSlot,  Multi = false}):OnChanged(function(v) MzD.S.FarmSlot = v end)
     FT:AddSlider("FarmMaxLevel",   {Title = "📈 Max Level", Default = MzD.S.MaxLevel, Min = 1, Max = 500, Rounding = 0}):OnChanged(function(v) MzD.S.MaxLevel = mfloor(v) end)
 
     local FSP = FT:AddParagraph({Title = "📊 Farm Status", Content = "Idle"})
@@ -265,37 +265,13 @@ function M.init(Modules)
         if MzD._isGod then MzD.disableGod() twait(0.3) MzD.enableGod() end
     end)
 
-    -- GUI Scale — lazy lookup, zoekt Fluent root frame pas als slider bewogen wordt
-    local _fluentGui = nil
-    local function findFluentGui()
-        if _fluentGui and _fluentGui.Parent then return _fluentGui end
-        for _, gui in pairs(Player.PlayerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") then
-                for _, child in pairs(gui:GetChildren()) do
-                    if child:IsA("Frame") and child.Size.X.Offset > 300 and child.Size.Y.Offset > 300 then
-                        _fluentGui = child
-                        return child
-                    end
-                end
-            end
-        end
-        return nil
-    end
-
+    -- GUI Scale via W.Main (Fluent's eigen window frame, altijd beschikbaar)
     CT:AddParagraph({Title = "🔎 GUI Schaal", Content = "50%–150% in stappen van 10%"})
     CT:AddSlider("GuiScale", {Title = "🔎 Schaal %", Default = 100, Min = 50, Max = 150, Rounding = 0}):OnChanged(function(v)
         local scale = mfloor(v / 10 + 0.5) * 10 / 100
         MzD.S.GuiScale = scale
         pcall(function()
-            local root = findFluentGui()
-            -- Fallback: loop door alle descendants als eerste poging mislukt
-            if not root then
-                for _, gui in pairs(Player.PlayerGui:GetDescendants()) do
-                    if gui:IsA("Frame") and gui.Size.X.Offset > 300 and gui.Size.Y.Offset > 300 then
-                        root = gui break
-                    end
-                end
-            end
+            local root = W.Main
             if not root then return end
             local uiScale = root:FindFirstChildOfClass("UIScale")
             if not uiScale then
