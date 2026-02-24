@@ -144,7 +144,13 @@ function M.init(Modules)
     local TTSP = FT:AddParagraph({Title = "🏆 Trial Status", Content = "Idle"})
     local TTTG = FT:AddToggle("TowerTrialToggle", {Title = "🏆 Auto Tower Trial Farm", Default = false})
     TTTG:OnChanged(function(v)
-        if v then MzD.startTowerTrial() else MzD.stopTowerTrial() end
+        if v then
+            MzD.startTowerTrial()
+            MzD.startTrialHUD()
+        else
+            MzD.stopTowerTrial()
+            MzD.stopTrialHUD()
+        end
     end)
 
     -- ========== FACTORY TAB ==========
