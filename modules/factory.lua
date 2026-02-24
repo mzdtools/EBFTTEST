@@ -6,7 +6,7 @@
 --   2. Max upgraden ZSM (dynamisch adaptief)
 --   3. PickUp → Unequip
 -- Herhaal voor elke brainrot in backpack.
--- Werkt voor ALLE rarities.
+-- Werkt voor ALLE rarities inclusief high rarities.
 -- ============================================
 
 local M = {}
@@ -28,9 +28,6 @@ function M.init(Modules)
         local bName = brainrot:GetAttribute("BrainrotName")
         local tRar  = brainrot:GetAttribute("Rarity")
         if not bName or bName == "" then return false end
-        if tRar and MzD.isHighRarity(tRar) then
-            return MzD.S.FactoryRarity == "Any" or MzD.S.FactoryRarity == tRar
-        end
         if lvl >= MzD.S.FactoryMaxLevel then return false end
         if MzD.S.FactoryMutation == "None" then
             if not (slower(tMut) == "none" or tMut == "") then return false end
@@ -94,11 +91,10 @@ function M.init(Modules)
                         return
                     end
 
-                    local bName   = brainrot:GetAttribute("BrainrotName") or "Brainrot"
-                    local tRar    = brainrot:GetAttribute("Rarity") or ""
-                    local isHighT = MzD.isHighRarity(tRar)
+                    local bName = brainrot:GetAttribute("BrainrotName") or "Brainrot"
+                    local tRar  = brainrot:GetAttribute("Rarity") or ""
 
-                    MzD.Status.factory = "🔧 " .. bName .. (isHighT and " ★" or "")
+                    MzD.Status.factory = "🔧 " .. bName .. (tRar ~= "" and " [" .. tRar .. "]" or "")
 
                     -- Naar slot, dan equip
                     MzD.tweenToSlot(ws) twait(0.3)
@@ -132,43 +128,33 @@ function M.init(Modules)
                         return
                     end
 
-                    -- ── DYNAMISCH UPGRADEN ZSM ──────────────────────
-                    -- Geen vaste twait: gelijk weer upgraden als level stijgt,
-                    -- heel kort wachten als het nog niet veranderd is.
-                    if not isHighT then
-                        local mb  = workspace:FindFirstChild("Bases") and workspace.Bases:FindFirstChild(MzD.baseGUID)
-                        local sm2 = mb and mb:FindFirstChild("slot " .. ws .. " brainrot")
-                        if sm2 then
-                            local cur   = tonumber(sm2:GetAttribute("Level")) or 0
-                            local fails = 0
-                            local delay = 0.05  -- start snel
+                    -- ── DYNAMISCH UPGRADEN ZSM (altijd, alle rarities) ──
+                    local mb  = workspace:FindFirstChild("Bases") and workspace.Bases:FindFirstChild(MzD.baseGUID)
+                    local sm2 = mb and mb:FindFirstChild("slot " .. ws .. " brainrot")
+                    if sm2 then
+                        local cur   = tonumber(sm2:GetAttribute("Level")) or 0
+                        local fails = 0
+                        local delay = 0.05
 
-                            while cur < MzD.S.FactoryMaxLevel and MzD.S.FactoryEnabled do
-                                MzD.upgradeBrainrot(ws)
-                                twait(delay)
-
-                                local nw = tonumber(sm2:GetAttribute("Level")) or cur
-                                if nw > cur then
-                                    -- Level gestegen: reset fails, blijf snel
-                                    cur   = nw
-                                    fails = 0
-                                    delay = 0.05
-                                    MzD.Status.factory = bName .. " Lv." .. cur .. "/" .. MzD.S.FactoryMaxLevel
-                                else
-                                    -- Nog niet gestegen: iets langer wachten, adaptief
-                                    fails += 1
-                                    delay = math.min(0.05 + (fails * 0.01), 0.3)  -- max 0.3s wacht
-                                    if fails > 80 then
-                                        stopReason = "Geld op!"
-                                        MzD.S.FactoryEnabled = false
-                                        break
-                                    end
+                        while cur < MzD.S.FactoryMaxLevel and MzD.S.FactoryEnabled do
+                            MzD.upgradeBrainrot(ws)
+                            twait(delay)
+                            local nw = tonumber(sm2:GetAttribute("Level")) or cur
+                            if nw > cur then
+                                cur   = nw
+                                fails = 0
+                                delay = 0.05
+                                MzD.Status.factory = bName .. " Lv." .. cur .. "/" .. MzD.S.FactoryMaxLevel
+                            else
+                                fails += 1
+                                delay = math.min(0.05 + (fails * 0.01), 0.3)
+                                if fails > 80 then
+                                    stopReason = "Geld op!"
+                                    MzD.S.FactoryEnabled = false
+                                    break
                                 end
                             end
                         end
-                    else
-                        MzD.Status.factory = "★ " .. tRar .. ": " .. bName .. " (gezet)"
-                        twait(0.5)
                     end
 
                     -- Oppakken → backpack
@@ -176,7 +162,7 @@ function M.init(Modules)
                         MzD.pickUpBrainrot(ws) twait(1.0)
                         MzD.Status.factoryCount += 1
                         MzD.safeUnequip() twait(0.3)
-                        MzD.Status.factory = (isHighT and "★ Klaar " or "Klaar ") .. bName .. " (#" .. MzD.Status.factoryCount .. ")"
+                        MzD.Status.factory = "Klaar " .. bName .. " (#" .. MzD.Status.factoryCount .. ")"
                     end
                 end)
 
