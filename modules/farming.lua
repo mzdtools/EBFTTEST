@@ -28,6 +28,9 @@ function M.init(Modules)
                     if not MzD.baseGUID then twait(2) return end
                     local ws = tonumber(MzD.S.FarmSlot) or 5
 
+                    -- ═══════════════════════════════════════════
+                    -- MODE: Collect Only
+                    -- ═══════════════════════════════════════════
                     if MzD.S.FarmMode == "Collect" then
                         if not MzD.ActiveBrainrots then MzD.ActiveBrainrots = workspace:FindFirstChild("ActiveBrainrots") end
                         if MzD.ActiveBrainrots then
@@ -56,6 +59,8 @@ function M.init(Modules)
                                                 else break end
                                             end
                                             MzD.safeUnequip() twait(0.1)
+                                            -- ★ FIX: Return to base after each collect
+                                            MzD.Status.farm = "Terugkeren..."
                                             if MzD._isGod then MzD.safeReturnToBase() else MzD.returnToBase() end
                                         end
                                     end
@@ -65,12 +70,26 @@ function M.init(Modules)
                         twait(1) return
                     end
 
+                    -- ═══════════════════════════════════════════
+                    -- MODE: Collect, Place & Max
+                    -- ═══════════════════════════════════════════
+
+                    -- ★ FIX: Always start each cycle at base
+                    MzD.Status.farm = "Naar base..."
+                    if MzD._isGod then MzD.safeReturnToBase() else MzD.returnToBase() end
+                    twait(0.2)
+
+                    -- Clear work slot if occupied
                     if not MzD.isSlotEmpty(ws) then MzD.pickUpBrainrot(ws) twait(0.5) MzD.safeUnequip() twait(0.3) end
+
+                    -- Check backpack first
                     local tool = MzD.findTargetToolInBackpack()
                     if tool and MzD.isHighRarityTool(tool) then
                         MzD.Status.farm = "High "..(tool:GetAttribute("Rarity") or "High")
                         MzD.Status.farmCount += 1 twait(0.5) tool = nil
                     end
+
+                    -- If no tool in backpack, go collect one
                     if not tool then
                         local found = false
                         if not MzD.ActiveBrainrots then MzD.ActiveBrainrots = workspace:FindFirstChild("ActiveBrainrots") end
@@ -102,7 +121,11 @@ function M.init(Modules)
                                                 else found = false break end
                                             end
                                             MzD.safeUnequip() twait(0.1)
+
+                                            -- ★ FIX: Return to base after collecting
+                                            MzD.Status.farm = "Terugkeren naar base..."
                                             if MzD._isGod then MzD.safeReturnToBase() else MzD.returnToBase() end
+                                            twait(0.2)
                                             break
                                         end
                                     end
@@ -115,12 +138,21 @@ function M.init(Modules)
                         tool = MzD.findTargetToolInBackpack()
                         if not tool then twait(1) return end
                     end
+
+                    -- High rarity skip
                     if MzD.isHighRarityTool(tool) then MzD.Status.farm = "High" MzD.Status.farmCount += 1 twait(0.5) return end
+
+                    -- Place, upgrade, pickup cycle
                     local bName = tool:GetAttribute("BrainrotName") or "Brainrot"
+
+                    -- ★ FIX: Make sure we're at base before placing
+                    MzD.Status.farm = "Plaatsen " .. bName .. "..."
                     MzD.tweenToSlot(ws) twait(0.3)
                     MzD.safeEquip(tool) twait(0.5)
                     MzD.placeBrainrot(ws) twait(0.8)
                     if MzD.isSlotEmpty(ws) then MzD.safeUnequip() twait(1) return end
+
+                    -- Upgrade to max
                     local mb  = workspace:FindFirstChild("Bases") and workspace.Bases:FindFirstChild(MzD.baseGUID)
                     local sm2 = mb and mb:FindFirstChild("slot "..ws.." brainrot")
                     if sm2 then
@@ -132,9 +164,17 @@ function M.init(Modules)
                             else fails += 1 if fails > 60 then break end end
                         end
                     end
+
+                    -- Pickup after maxing
                     twait(0.3)
                     MzD.pickUpBrainrot(ws) twait(0.8) MzD.safeUnequip() twait(0.3)
                     if not MzD.isSlotEmpty(ws) then MzD.pickUpBrainrot(ws) twait(0.5) MzD.safeUnequip() twait(0.3) end
+
+                    -- ★ FIX: Return to base after completing the full cycle
+                    MzD.Status.farm = "Cyclus klaar, terugkeren..."
+                    if MzD._isGod then MzD.safeReturnToBase() else MzD.returnToBase() end
+                    twait(0.2)
+
                 end)
                 if not ok then twait(1) end
                 twait(0.3)
