@@ -1,8 +1,7 @@
 -- ============================================
 -- [MODULE 17] TOWER TRIAL FARM — v18 logica
--- Geïntegreerd: haltMovement, nil-checks op
--- fireproximityprompt, findRoot fallback,
--- Walk Y fine-tune via GUI knoppen.
+-- Fixes: startParent check, pickup succes OR-conditie,
+--        safeUnequip altijd na submit, HUD waitStart loop
 -- ============================================
 
 local M = {}
@@ -21,7 +20,7 @@ function M.init(Modules)
     local sformat = G.sformat
     local mfloor  = G.mfloor
 
-    -- Bewegingsstop helper (uit v18)
+    -- Bewegingsstop helper
     local function haltMovement()
         local char = Player.Character if not char then return end
         local hrp  = char:FindFirstChild("HumanoidRootPart")
@@ -151,7 +150,7 @@ function M.init(Modules)
         return count
     end
 
-    -- findRoot met fallback (v18 patroon)
+    -- findRoot met fallback
     local function trialFindRoot(b)
         if not b then return nil end
         if MzD.findBrainrotRoot then
@@ -272,22 +271,24 @@ function M.init(Modules)
                             twait(1.5) return
                         end
 
-                        local entry      = list[1]
-                        local startTools = trialGetToolCount()
+                        local entry       = list[1]
+                        local startParent = entry.b.Parent        -- FIX: parent bijhouden
+                        local startTools  = trialGetToolCount()
                         MzD.Status.towerTrial = "🧠 Ophalen " .. required .. " (" .. mfloor(entry.dist) .. "m)"
                         if MzD._isGod then MzD.safePathTo(entry.root.CFrame * CFrame.new(0,3,0))
                         else MzD.tweenTo(entry.root.CFrame * CFrame.new(0,3,0)) end
 
                         for attempt = 1, 6 do
                             if not MzD._towerTrialEnabled then break end
-                            if not entry.b or not entry.b.Parent then break end
+                            if not entry.b or entry.b.Parent ~= startParent then break end  -- FIX: verdween = opgepakt, stop loop
                             if trialGetToolCount() > startTools then break end
                             MzD.forceGrabPrompt(entry.root)
                             MzD.forceGrabPrompt(entry.b)
                             twait(0.3)
                         end
 
-                        if trialGetToolCount() > startTools then
+                        -- FIX: succes = toolcount gestegen OF brainrot verdween uit folder
+                        if trialGetToolCount() > startTools or (entry.b and entry.b.Parent ~= startParent) then
                             depBeforeTrip = cur
                             state = "SUBMIT"
                         else
@@ -312,16 +313,26 @@ function M.init(Modules)
                             trialFirePrompts(tower)
                             twait(0.4)
                             local cur2, _ = trialGetDeposits()
-                            if cur2 > depBeforeTrip then deposited = true break end
+                            if cur2 > depBeforeTrip then
+                                deposited = true
+                                break
+                            end
                         end
 
                         if deposited then
+                            -- FIX: wacht op HUD-bevestiging zoals standalone
+                            local waitStart = tick()
+                            local cur2, _  = trialGetDeposits()
+                            while cur2 <= depBeforeTrip and (tick() - waitStart) < 6 do
+                                twait(0.2)
+                                cur2, _ = trialGetDeposits()
+                            end
                             twait(3)
-                            MzD.safeUnequip()
                         else
                             MzD.Status.towerTrial = "⚠️ Submit mislukt"
-                            MzD.safeUnequip()
                         end
+
+                        MzD.safeUnequip()   -- FIX: altijd unequippen, ook bij mislukking
                         state = "COLLECT"
                         return
                     end
