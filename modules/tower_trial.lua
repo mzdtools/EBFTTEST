@@ -4,7 +4,8 @@
 --        safeUnequip altijd na submit, HUD waitStart loop,
 --        safePathTo voor submit (langs muur, niet rechtdoor),
 --        unstuck na claim via sideways escape + safeReturnToBase,
---        safeUnequip pas op base (niet onder de tower)
+--        safeUnequip pas op base (niet onder de tower),
+--        pickup verbeterd (cframe lock & recursive fire)
 -- ============================================
 
 local M = {}
@@ -288,15 +289,29 @@ function M.init(Modules)
                         local startParent = entry.b.Parent
                         local startTools  = trialGetToolCount()
                         MzD.Status.towerTrial = "🧠 Ophalen " .. required .. " (" .. mfloor(entry.dist) .. "m)"
+                        
                         MzD.safePathTo(entry.root.CFrame * CFrame.new(0,3,0))
 
-                        for attempt = 1, 6 do
+                        -- FIX: Meer pogingen, positie updaten in de loop, en alle prompts afvuren
+                        for attempt = 1, 15 do
                             if not MzD._towerTrialEnabled then break end
                             if not entry.b or entry.b.Parent ~= startParent then break end
                             if trialGetToolCount() > startTools then break end
+                            
+                            -- Blijf strak op de root staan (handig als het item rolt/beweegt)
+                            if entry.root then
+                                pcall(function()
+                                    local char = Player.Character
+                                    if char and char:FindFirstChild("HumanoidRootPart") then
+                                        char.HumanoidRootPart.CFrame = entry.root.CFrame * CFrame.new(0, 3, 0)
+                                    end
+                                end)
+                            end
+
                             MzD.forceGrabPrompt(entry.root)
                             MzD.forceGrabPrompt(entry.b)
-                            twait(0.3)
+                            trialFirePrompts(entry.b)
+                            twait(0.2)
                         end
 
                         if trialGetToolCount() > startTools or (entry.b and entry.b.Parent ~= startParent) then
