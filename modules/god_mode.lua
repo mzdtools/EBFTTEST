@@ -1,5 +1,7 @@
 -- ============================================
--- [MODULE 10] GOD MODE
+-- [MODULE 10] GOD MODE - NANO EDITION (v26)
+-- Fixes: Gesplitste lift! Bases gaan naar +12.5 (staan op de vloer),
+-- de toren en shops gaan naar +6.5 (zodat die niet zweven).
 -- ============================================
 
 local M = {}
@@ -88,7 +90,7 @@ function M.init(Modules)
                         if f:IsA("BasePart") and not isMzDPart(f)
                            and f.Size.X > 15 and f.Size.Z > 5 and f.Size.Y < 20
                            and f.Position.Y > -10 and f.Position.Y < 30 then
-                            tinsert(floors, f)
+                             tinsert(floors, f)
                         end
                     end
                 end
@@ -101,6 +103,37 @@ function M.init(Modules)
                 end
             end
         end
+
+        local go = workspace:FindFirstChild("GameObjects")
+        if go then
+            local ps = go:FindFirstChild("PlaceSpecific", true)
+            if ps then
+                local root = ps:FindFirstChild("root")
+                if root then
+                    local misc = root:FindFirstChild("Misc")
+                    if misc then
+                        for _, d in pairs(misc:GetDescendants()) do
+                            if d:IsA("BasePart") then
+                                tinsert(floors, d)
+                            end
+                        end
+                    end
+                    
+                    local tower = root:FindFirstChild("Tower")
+                    if tower then
+                        for _, child in pairs(tower:GetChildren()) do
+                            if child.Name ~= "Main" then
+                                if child:IsA("BasePart") then tinsert(floors, child) end
+                                for _, d in pairs(child:GetDescendants()) do
+                                    if d:IsA("BasePart") then tinsert(floors, d) end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
         return floors, map
     end
 
@@ -249,15 +282,27 @@ function M.init(Modules)
             local segLen  = mmin(maxSeg, endX - curX)
             local centerX = curX + segLen/2
             local floor   = Instance.new("Part")
-            floor.Name         = "MzDGodFloor"
+            floor.Name         = "MzDNanoFloor"
             floor.Size         = Vector3.new(segLen, floorThick, floorWidth)
             floor.Position     = Vector3.new(centerX, floorY, 0)
             floor.Anchored     = true floor.CanCollide = true
-            floor.Color        = theme.floor floor.Material = Enum.Material.SmoothPlastic
-            floor.Transparency = 0
+            
+            floor.Color        = Color3.fromRGB(15, 15, 15)
+            floor.Material     = Enum.Material.Glass 
+            floor.Transparency = 0.1 
+            floor.Reflectance  = 0.3 
+            
             floor.TopSurface   = Enum.SurfaceType.Smooth floor.BottomSurface = Enum.SurfaceType.Smooth
             floor.Parent       = workspace
             tinsert(MzD._godCreatedParts, floor)
+
+            local light = Instance.new("SurfaceLight")
+            light.Color = theme.stripe
+            light.Brightness = 2 
+            light.Range = 20
+            light.Face = Enum.NormalId.Top
+            light.Angle = 180 
+            light.Parent = floor
 
             if firstSeg then
                 firstSeg = false
@@ -270,7 +315,7 @@ function M.init(Modules)
                 s.Name = "MzDGodFloorStripe" s.Size = Vector3.new(segLen, 0.2, 2)
                 s.Position = Vector3.new(centerX, topY, zPos)
                 s.Anchored = true s.CanCollide = false
-                s.Color = theme.stripe s.Material = Enum.Material.Neon
+                s.Color = theme.stripe s.Material = Enum.Material.Neon 
                 s.Parent = workspace
                 tinsert(MzD._godCreatedParts, s)
             end
@@ -281,6 +326,26 @@ function M.init(Modules)
             sm.Color = theme.stripe sm.Material = Enum.Material.Neon
             sm.Parent = workspace
             tinsert(MzD._godCreatedParts, sm)
+
+            local wallHeight = 50
+            local wallThickness = 2
+            local wallY = floorY + (floorThick / 2) + (wallHeight / 2)
+
+            for _, zOffset in pairs({floorWidth/2 + wallThickness/2, -floorWidth/2 - wallThickness/2}) do
+                local wall = Instance.new("Part")
+                wall.Name = "MzDGodNanoWall"
+                wall.Size = Vector3.new(segLen, wallHeight, wallThickness)
+                wall.Position = Vector3.new(centerX, wallY, zOffset)
+                wall.Anchored = true; wall.CanCollide = true
+                
+                wall.Material = Enum.Material.ForceField
+                wall.Transparency = 0.7 
+                wall.Color = theme.stripe 
+                
+                wall.Parent = workspace
+                tinsert(MzD._godCreatedParts, wall)
+            end
+
             curX = curX + segLen
         end
 
@@ -341,6 +406,94 @@ function M.init(Modules)
         MzD._godCreatedParts = {}
     end
 
+    -- GECORRIGEERDE LOWERSTRUCTURES (Bases +12.5, Rest +6.5)
+    local function godLowerStructures()
+        MzD._godMovedParts = {}
+        local targets = {}
+        
+        if workspace:FindFirstChild("Bases") then
+            for _, base in pairs(workspace.Bases:GetChildren()) do 
+                tinsert(targets, {model = base, offsetY = 12.5}) 
+            end
+        end
+        
+        local function addNormalTarget(obj)
+            if obj then tinsert(targets, {model = obj, offsetY = 6.5}) end
+        end
+        
+        addNormalTarget(workspace:FindFirstChild("DoomWheel"))
+        addNormalTarget(workspace:FindFirstChild("LimitedShop"))
+        
+        local go = workspace:FindFirstChild("GameObjects")
+        if go then
+            local ps = go:FindFirstChild("PlaceSpecific", true)
+            if ps then
+                local root = ps:FindFirstChild("root")
+                if root then
+                    addNormalTarget(root:FindFirstChild("UpgradeShop"))
+                    addNormalTarget(root:FindFirstChild("PlazaPortal"))
+                    addNormalTarget(root:FindFirstChild("SiteEventDetails"))
+                    local sm = root:FindFirstChild("SpawnMachines")
+                    if sm then addNormalTarget(sm:FindFirstChild("Default")) end
+                    
+                    local tower = root:FindFirstChild("Tower")
+                    if tower then
+                        addNormalTarget(tower:FindFirstChild("Main"))
+                    end
+                end
+            end
+        end
+
+        for _, item in pairs(targets) do
+            local obj = item.model
+            local specificTargetY = MzD.S.GodFloorY + item.offsetY
+            
+            local groundY = nil
+            for _, d in pairs(obj:GetDescendants()) do
+                if d:IsA("BasePart") then
+                    local n = slower(d.Name)
+                    if n == "ground" or n == "floor" or sfind(n, "baseplate") then
+                        groundY = d.Position.Y
+                        break
+                    end
+                end
+            end
+            
+            if not groundY then
+                local minY = mhuge
+                for _, d in pairs(obj:GetDescendants()) do
+                    if d:IsA("BasePart") and d.Position.Y < minY then
+                        minY = d.Position.Y
+                    end
+                end
+                if minY ~= mhuge then groundY = minY end
+            end
+
+            if groundY then
+                local deltaY = specificTargetY - groundY
+                for _, d in pairs(obj:GetDescendants()) do
+                    if d:IsA("BasePart") and not isMzDPart(d) then
+                        tinsert(MzD._godMovedParts, { part = d, origCF = d.CFrame })
+                        d.CFrame = d.CFrame + Vector3.new(0, deltaY, 0)
+                    end
+                end
+            end
+        end
+    end
+
+    local function godRestoreStructures()
+        if MzD._godMovedParts then
+            for _, data in pairs(MzD._godMovedParts) do
+                pcall(function()
+                    if data.part and data.part.Parent then
+                        data.part.CFrame = data.origCF
+                    end
+                end)
+            end
+        end
+        MzD._godMovedParts = {}
+    end
+
     local function godTeleportUnder()
         local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
@@ -357,7 +510,7 @@ function M.init(Modules)
             end)
         end
     end
-    -- Expose for external use (GUI buttons, respawn handler)
+
     M.godTeleportUnder = godTeleportUnder
     M.godBuildEgaleVloer = godBuildEgaleVloer
     M.godDisableKillParts = godDisableKillParts
@@ -443,6 +596,8 @@ function M.init(Modules)
         twait(0.1)
         local map = godHideOriginalFloors()
         twait(0.1)
+        godLowerStructures()
+        twait(0.1)
         godBuildEgaleVloer(map)
         twait(0.2)
         godStartLoop()
@@ -450,7 +605,7 @@ function M.init(Modules)
         godTeleportUnder()
         twait(0.1)
         if Player.Character then godSetupHealth(Player.Character) end
-        MzD.Status.god = "Aan (Y="..MzD.S.GodWalkY.." K:"..killCount.." V:"..#MzD._godCreatedParts..")"
+        MzD.Status.god = "Aan (Y="..MzD.S.GodWalkY.." K:"..killCount.." NanoVloer)"
     end
 
     function MzD.disableGod()
@@ -460,6 +615,7 @@ function M.init(Modules)
         if MzD._godHealthConn      then pcall(function() MzD._godHealthConn:Disconnect() end) MzD._godHealthConn = nil end
         if MzD._godDiedConn        then pcall(function() MzD._godDiedConn:Disconnect()   end) MzD._godDiedConn = nil end
         godRestoreFloors()
+        godRestoreStructures()
         godRestoreKillParts()
         local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
         if hrp then hrp.Velocity = Vector3.new(0,0,0) hrp.CFrame = CFrame.new(hrp.Position.X, 10, hrp.Position.Z) end
