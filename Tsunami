@@ -20,8 +20,9 @@ local moduleNames = {
     "slot_helpers",
     "factory",
     "farming",
+    "firefice",
     "tower_trial",
-    "tower_trial_hud",   -- ← nieuw: floating HUD overlay
+    "tower_trial_hud",
     "lucky_blocks",
     "money_collector",
     "auto_upgrade",
