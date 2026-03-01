@@ -433,25 +433,23 @@ function M.init(Modules)
         return lowestBottom
     end
 
-    -- Vind de vloer van een base: zoek LeftFloor/RightFloor/Floor namen
-    -- Pak de HOOGSTE vloer want dat is waar de brainrots op staan (bovenste verdieping)
+    -- Vind de vloer van een base: zoek Floor/Ground/Baseplate namen
+    -- Alleen PLATTE parts (SizeX > 3 en SizeZ > 3), skip dunne neon strips
     local function getBaseFloorBottom(base)
-        local highestFloor = -mhuge
-        local highestBottom = -mhuge
+        local lowestFloor = mhuge
         for _, d in pairs(base:GetDescendants()) do
             if d:IsA("BasePart") and not isMzDPart(d) then
                 local n = slower(d.Name)
                 if sfind(n, "floor") or sfind(n, "ground") or sfind(n, "baseplate") then
+                    -- Skip dunne strips (neon randen etc): moet een plat oppervlak zijn
+                    if d.Size.X < 3 or d.Size.Z < 3 then continue end
                     local bottom = d.Position.Y - (d.Size.Y / 2)
-                    -- Pak de hoogste vloer (bovenste verdieping waar brainrots op staan)
-                    if bottom > highestBottom then
-                        highestBottom = bottom
-                    end
+                    if bottom < lowestFloor then lowestFloor = bottom end
                 end
             end
         end
-        if highestBottom == -mhuge then return getModelTrueBottom(base) end
-        return highestBottom
+        if lowestFloor == mhuge then return getModelTrueBottom(base) end
+        return lowestFloor
     end
 
 
