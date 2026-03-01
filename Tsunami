@@ -20,7 +20,7 @@ local moduleNames = {
     "slot_helpers",
     "factory",
     "farming",
-    "firefice",
+    "fireice",
     "tower_trial",
     "tower_trial_hud",
     "lucky_blocks",
