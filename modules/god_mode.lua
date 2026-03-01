@@ -411,84 +411,157 @@ function M.init(Modules)
     end
 
     -- ==========================================
-    -- STRUCTUREN VERLAGEN (v29: score-systeem)
+    -- STRUCTUREN VERLAGEN (v30: fixes voor eigen base, zwevers, doorzakkers)
     -- ==========================================
+
+    -- Vind de absolute onderkant van een model (laagste punt van alle parts)
+    local function getModelTrueBottom(model)
+        local lowestBottom = mhuge
+        for _, d in pairs(model:GetDescendants()) do
+            if d:IsA("BasePart") and not isMzDPart(d) then
+                -- Skip onderdelen die extreem hoog staan (bv. vlaggen, antennes)
+                if d.Position.Y < 200 then
+                    local bottom = d.Position.Y - (d.Size.Y / 2)
+                    if bottom < lowestBottom then
+                        lowestBottom = bottom
+                    end
+                end
+            end
+        end
+        return lowestBottom
+    end
+
+    -- Vind de vloer via score systeem (voor bases)
+    local function getModelFloorBottom(model)
+        local bestPart = nil
+        local highestScore = -mhuge
+
+        for _, d in pairs(model:GetDescendants()) do
+            if d:IsA("BasePart") and not isMzDPart(d) then
+                local area = d.Size.X * d.Size.Z
+                local n = slower(d.Name)
+                local isFloorName = (n == "ground" or n == "floor" or sfind(n, "baseplate") or n == "main" or n == "pad" or n == "base")
+
+                if d.Size.Y < 15 and area > 50 then
+                    local nameBonus = isFloorName and 100000 or 0
+                    local heightPenalty = d.Position.Y * 10
+                    local score = area + nameBonus - heightPenalty
+
+                    if score > highestScore then
+                        highestScore = score
+                        bestPart = d
+                    end
+                end
+            end
+        end
+
+        if bestPart then
+            return bestPart.Position.Y - (bestPart.Size.Y / 2)
+        end
+        return nil
+    end
+
+    local function godMoveModel(obj, deltaY, isBase)
+        if isBase and MzD._baseDeltas then
+            MzD._baseDeltas[obj] = deltaY
+        end
+        for _, d in pairs(obj:GetDescendants()) do
+            if d:IsA("BasePart") and not isMzDPart(d) then
+                tinsert(MzD._godMovedParts, {part = d, origCF = d.CFrame})
+                MzD._godMovedSet[d] = true
+                pcall(function() d.CFrame = d.CFrame + Vector3.new(0, deltaY, 0) end)
+            end
+        end
+    end
+
     local function godLowerStructures()
         MzD._godMovedParts = {}
         MzD._godMovedSet = {}
         MzD._baseDeltas = {}
-        local targets = {}
 
+        local floorTop = MzD.S.GodFloorY + 2  -- bovenkant van onze vloer (4 dik, center = GodFloorY)
+
+        -- ===== 1. ALLE BASES (score-systeem voor vloer) =====
         if workspace:FindFirstChild("Bases") then
             for _, base in pairs(workspace.Bases:GetChildren()) do
-                tinsert(targets, {model = base, isBase = true})
+                local bottomY = getModelFloorBottom(base)
+                if bottomY and bottomY ~= mhuge then
+                    local deltaY = floorTop - bottomY
+                    -- Clamp: niet meer dan 500 stuks omhoog of omlaag (voorkomt gekke waarden)
+                    if mabs(deltaY) < 500 then
+                        godMoveModel(base, deltaY, true)
+                    end
+                end
             end
         end
 
-        local function addNormalTarget(obj)
-            if obj then tinsert(targets, {model = obj, isBase = false}) end
+        -- ===== 2. WORKSPACE DIRECTE OBJECTEN =====
+        local function tryMoveWorkspaceObj(name)
+            local obj = workspace:FindFirstChild(name)
+            if not obj then return end
+            local trueBottom = getModelTrueBottom(obj)
+            if trueBottom == mhuge then return end
+            local deltaY = floorTop - trueBottom
+            if mabs(deltaY) < 500 then
+                godMoveModel(obj, deltaY, false)
+            end
         end
 
-        addNormalTarget(workspace:FindFirstChild("DoomWheel"))
-        addNormalTarget(workspace:FindFirstChild("LimitedShop"))
+        tryMoveWorkspaceObj("DoomWheel")
+        tryMoveWorkspaceObj("LimitedShop")
 
+        -- ===== 3. GAME OBJECTS (Shops, Portals, Machines) =====
         local go = workspace:FindFirstChild("GameObjects")
         if go then
             local ps = go:FindFirstChild("PlaceSpecific", true)
             if ps then
                 local root = ps:FindFirstChild("root")
                 if root then
-                    addNormalTarget(root:FindFirstChild("UpgradeShop"))
-                    addNormalTarget(root:FindFirstChild("PlazaPortal"))
-                    addNormalTarget(root:FindFirstChild("SiteEventDetails"))
-                    local sm = root:FindFirstChild("SpawnMachines")
-                    if sm then addNormalTarget(sm:FindFirstChild("Default")) end
-                    local tower = root:FindFirstChild("Tower")
-                    if tower then addNormalTarget(tower:FindFirstChild("Main")) end
-                end
-            end
-        end
-
-        for _, item in pairs(targets) do
-            local obj = item.model
-
-            -- Score systeem: vind de echte vloer van dit model
-            local bestPart = nil
-            local highestScore = -mhuge
-
-            for _, d in pairs(obj:GetDescendants()) do
-                if d:IsA("BasePart") and not isMzDPart(d) then
-                    local area = d.Size.X * d.Size.Z
-                    local n = slower(d.Name)
-                    local isFloorName = (n == "ground" or n == "floor" or sfind(n, "baseplate") or n == "main" or n == "pad")
-
-                    if d.Size.Y < 15 and area > 50 then
-                        local nameBonus = isFloorName and 100000 or 0
-                        local heightPenalty = d.Position.Y * 10
-                        local score = area + nameBonus - heightPenalty
-
-                        if score > highestScore then
-                            highestScore = score
-                            bestPart = d
+                    -- Objecten die op de absolute bodem moeten landen
+                    local trueBottomTargets = {
+                        "UpgradeShop", "MysteryMerchant", "SiteEventDetails",
+                        "PlazaPortal",
+                    }
+                    for _, name in pairs(trueBottomTargets) do
+                        local obj = root:FindFirstChild(name)
+                        if obj then
+                            local trueBottom = getModelTrueBottom(obj)
+                            if trueBottom ~= mhuge then
+                                local deltaY = floorTop - trueBottom
+                                if mabs(deltaY) < 500 then
+                                    godMoveModel(obj, deltaY, false)
+                                end
+                            end
                         end
                     end
-                end
-            end
 
-            if bestPart then
-                local bottomY = bestPart.Position.Y - (bestPart.Size.Y / 2)
-                local targetY = MzD.S.GodFloorY + 2  -- Vloer is 4 dik, top = GodFloorY + 2
-                local deltaY = targetY - bottomY
+                    -- SpawnMachines (Sell machine, Wave machine, Spin wheel etc.)
+                    local sm = root:FindFirstChild("SpawnMachines")
+                    if sm then
+                        for _, machine in pairs(sm:GetChildren()) do
+                            local trueBottom = getModelTrueBottom(machine)
+                            if trueBottom ~= mhuge then
+                                local deltaY = floorTop - trueBottom
+                                if mabs(deltaY) < 500 then
+                                    godMoveModel(machine, deltaY, false)
+                                end
+                            end
+                        end
+                    end
 
-                if item.isBase then
-                    MzD._baseDeltas[obj] = deltaY
-                end
-
-                for _, d in pairs(obj:GetDescendants()) do
-                    if d:IsA("BasePart") and not isMzDPart(d) then
-                        tinsert(MzD._godMovedParts, {part = d, origCF = d.CFrame})
-                        MzD._godMovedSet[d] = true
-                        d.CFrame = d.CFrame + Vector3.new(0, deltaY, 0)
+                    -- Tower main
+                    local tower = root:FindFirstChild("Tower")
+                    if tower then
+                        local main = tower:FindFirstChild("Main")
+                        if main then
+                            local trueBottom = getModelTrueBottom(main)
+                            if trueBottom ~= mhuge then
+                                local deltaY = floorTop - trueBottom
+                                if mabs(deltaY) < 500 then
+                                    godMoveModel(main, deltaY, false)
+                                end
+                            end
+                        end
                     end
                 end
             end
@@ -558,15 +631,65 @@ function M.init(Modules)
                     end
 
                     -- Actieve magneet: nieuwe brainrots op eigen base naar beneden
-                    if MzD.baseGUID and workspace:FindFirstChild("Bases") then
-                        local myBase = workspace.Bases:FindFirstChild(MzD.baseGUID)
-                        if myBase and MzD._baseDeltas and MzD._baseDeltas[myBase] then
-                            local delta = MzD._baseDeltas[myBase]
-                            for _, d in pairs(myBase:GetDescendants()) do
-                                if d:IsA("BasePart") and not isMzDPart(d) and not MzD._godMovedSet[d] then
-                                    tinsert(MzD._godMovedParts, {part = d, origCF = d.CFrame})
-                                    MzD._godMovedSet[d] = true
-                                    d.CFrame = d.CFrame + Vector3.new(0, delta, 0)
+                    -- Zoek base via GUID of via naam
+                    if workspace:FindFirstChild("Bases") then
+                        local myBase = nil
+                        if MzD.baseGUID then
+                            myBase = workspace.Bases:FindFirstChild(MzD.baseGUID)
+                        end
+                        -- Fallback: zoek base op naam van de speler
+                        if not myBase then
+                            local pname = slower(Player.Name)
+                            for _, b in pairs(workspace.Bases:GetChildren()) do
+                                if sfind(slower(b.Name), pname) then
+                                    myBase = b break
+                                end
+                            end
+                        end
+
+                        if myBase then
+                            -- Als deze base nog geen delta heeft, bereken die nu
+                            if not (MzD._baseDeltas and MzD._baseDeltas[myBase]) then
+                                if MzD._baseDeltas then
+                                    local floorTop = MzD.S.GodFloorY + 2
+                                    local bottomY = nil
+                                    -- Score systeem voor bodem
+                                    local bestPart, highestScore = nil, -mhuge
+                                    for _, d in pairs(myBase:GetDescendants()) do
+                                        if d:IsA("BasePart") and not isMzDPart(d) then
+                                            local area = d.Size.X * d.Size.Z
+                                            local n = slower(d.Name)
+                                            local bonus = (n == "ground" or n == "floor" or sfind(n,"base") or n == "pad") and 100000 or 0
+                                            if d.Size.Y < 15 and area > 50 then
+                                                local score = area + bonus - d.Position.Y * 10
+                                                if score > highestScore then highestScore = score bestPart = d end
+                                            end
+                                        end
+                                    end
+                                    if bestPart then bottomY = bestPart.Position.Y - bestPart.Size.Y/2 end
+                                    if bottomY then
+                                        local delta = floorTop - bottomY
+                                        if mabs(delta) < 500 then
+                                            MzD._baseDeltas[myBase] = delta
+                                            for _, d in pairs(myBase:GetDescendants()) do
+                                                if d:IsA("BasePart") and not isMzDPart(d) and not MzD._godMovedSet[d] then
+                                                    tinsert(MzD._godMovedParts, {part = d, origCF = d.CFrame})
+                                                    MzD._godMovedSet[d] = true
+                                                    pcall(function() d.CFrame = d.CFrame + Vector3.new(0, delta, 0) end)
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            else
+                                -- Delta is al bekend, alleen nieuwe parts verplaatsen
+                                local delta = MzD._baseDeltas[myBase]
+                                for _, d in pairs(myBase:GetDescendants()) do
+                                    if d:IsA("BasePart") and not isMzDPart(d) and not MzD._godMovedSet[d] then
+                                        tinsert(MzD._godMovedParts, {part = d, origCF = d.CFrame})
+                                        MzD._godMovedSet[d] = true
+                                        pcall(function() d.CFrame = d.CFrame + Vector3.new(0, delta, 0) end)
+                                    end
                                 end
                             end
                         end
