@@ -414,17 +414,23 @@ function M.init(Modules)
     -- STRUCTUREN VERLAGEN (v30: fixes voor eigen base, zwevers, doorzakkers)
     -- ==========================================
 
-    -- Vind de absolute onderkant van een model (laagste punt van alle parts)
+    -- Vind de echte onderkant van een model, skip radius/paal/antenne parts
     local function getModelTrueBottom(model)
         local lowestBottom = mhuge
         for _, d in pairs(model:GetDescendants()) do
             if d:IsA("BasePart") and not isMzDPart(d) then
-                -- Skip onderdelen die extreem hoog staan (bv. vlaggen, antennes)
-                if d.Position.Y < 200 then
-                    local bottom = d.Position.Y - (d.Size.Y / 2)
-                    if bottom < lowestBottom then
-                        lowestBottom = bottom
-                    end
+                local n = slower(d.Name)
+                -- Skip Radius parts (onzichtbare interactie-cilinders)
+                if n == "radius" then continue end
+                -- Skip extreem hoge objecten (vlaggen, antennes)
+                if d.Position.Y > 200 then continue end
+                -- Skip dunne lange palen: SizeY > 10 en meer dan 2x groter dan breedte
+                local maxXZ = d.Size.X > d.Size.Z and d.Size.X or d.Size.Z
+                if d.Size.Y > 10 and d.Size.Y > maxXZ * 2 then continue end
+
+                local bottom = d.Position.Y - (d.Size.Y / 2)
+                if bottom < lowestBottom then
+                    lowestBottom = bottom
                 end
             end
         end
@@ -479,6 +485,9 @@ function M.init(Modules)
 
         tryMoveWorkspaceObj("DoomWheel")
         tryMoveWorkspaceObj("LimitedShop")
+        tryMoveWorkspaceObj("FireAndIceWheel")
+        tryMoveWorkspaceObj("DivineLuckyBlockPad")
+        tryMoveWorkspaceObj("MysteryMerchant")
 
         -- ===== 3. GAME OBJECTS (Shops, Portals, Machines) =====
         local go = workspace:FindFirstChild("GameObjects")
@@ -489,7 +498,7 @@ function M.init(Modules)
                 if root then
                     -- Objecten die op de absolute bodem moeten landen
                     local trueBottomTargets = {
-                        "MysteryMerchant", "SiteEventDetails", "PlazaPortal",
+                        "MysteryMerchant", "SiteEventDetails", "PlazaPortal", "SellStand",
                     }
                     for _, name in pairs(trueBottomTargets) do
                         local obj = root:FindFirstChild(name)
@@ -504,12 +513,12 @@ function M.init(Modules)
                         end
                     end
                     
-                    -- UpgradeShop: zit iets te hoog, kleine extra neerwaartse offset
+                    -- UpgradeShop: normale plaatsing op vloer
                     local upgradeShop = root:FindFirstChild("UpgradeShop")
                     if upgradeShop then
                         local trueBottom = getModelTrueBottom(upgradeShop)
                         if trueBottom ~= mhuge then
-                            local deltaY = (floorTop - trueBottom) - 2  -- 2 studs extra omlaag
+                            local deltaY = floorTop - trueBottom
                             if mabs(deltaY) < 500 then
                                 godMoveModel(upgradeShop, deltaY, false)
                             end
