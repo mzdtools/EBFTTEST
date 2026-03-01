@@ -8,15 +8,15 @@ function M.init(Modules)
     local MzD = Modules.globals.MzD
 
     MzD.S = {
-        Farming            = true,  -- Standaard aan
+        Farming            = true,
         SelectedBrainrots  = {},
         TargetMutation     = "None",
-        TargetRarity       = {"Divine", "Infinity"}, -- Standaard Divine & Infinity
+        TargetRarity       = {"Divine", "Infinity"},
         TweenSpeed         = 9999,
         CorridorSpeed      = 1500,
         AutoCollectMoney   = false,
         InstantPickup      = true,
-        AntiAFK            = false,
+        AntiAFK            = true,  -- <-- Standaard aan
         AutoUpgrade        = false,
         MaxLevel           = 250,
         FactoryEnabled     = false,
@@ -24,19 +24,19 @@ function M.init(Modules)
         FactoryRarity      = "Common",
         FactoryMutation    = "None",
         FactoryMaxLevel    = 250,
-        FarmMode           = "Collect", -- Standaard op Collect
+        FarmMode           = "Collect",
         FarmSlot           = "5",
-        ValentineEnabled   = true,  -- Alle events standaard aan
+        ValentineEnabled   = true,
         ArcadeEnabled      = true,
         FireiceEnabled     = true,
         MapFixerEnabled    = false,
-        LuckyBlockEnabled  = true,  -- LB standaard aan
-        LuckyBlockRarity   = {"Divine", "Infinity"}, -- LB standaard Divine & Infinity
+        LuckyBlockEnabled  = true,
+        LuckyBlockRarity   = {"Divine", "Infinity", "Admin"}, -- <-- Admin toegevoegd
         LuckyBlockMutation = "Any",
         GodEnabled         = false,
         GodWalkY           = 0,
         GodFloorY          = -10,
-        DoomEnabled        = true,  -- Event aan
+        DoomEnabled        = true,
         WallTheme          = "Auto",
         GuiScale           = 1.0,
         -- Tower Trial
@@ -48,7 +48,7 @@ function M.init(Modules)
     MzD.Status = {
         farm           = "Idle", farmCount      = 0,
         money          = "Idle",
-        afk            = "Uit",
+        afk            = "Aan",
         placeCount     = 0,      upgradeCount   = 0,
         upgrade        = "Idle",
         factory        = "Idle", factoryCount  = 0,
