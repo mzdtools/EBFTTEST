@@ -35,8 +35,6 @@ local moduleNames = {
     "gui",
     "status_loop",
     "startup",
-    "etc",
-    "etc2",
 }
 local Modules = {}
 -- Phase 1: Load all module tables with retry logic
