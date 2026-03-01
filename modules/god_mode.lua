@@ -433,51 +433,66 @@ function M.init(Modules)
         return lowestBottom
     end
 
-    -- Vind de vloer van een base: pak de NormalFloor/Floor hoogte die het MEEST voorkomt
-    -- Dit is de hoofdverdieping waar de meeste brainrots op staan
+    -- Vind de vloer van een base: pak Floor1 = de laagste platte NormalFloor
+    -- Floor1 is de begane grond, Floor2/3/4 staan er automatisch correct boven
     local function getBaseFloorBottom(base)
-        -- Tel per unieke Y-hoogte hoeveel floor parts er zijn
-        local heightCounts = {}
-        local heightBottoms = {}
-        
+        local lowestBottom = mhuge
+
+        -- Probeer eerst via Floor1 folder direct
+        local floor1 = base:FindFirstChild("Floor1")
+        if floor1 then
+            for _, d in pairs(floor1:GetDescendants()) do
+                if d:IsA("BasePart") and not isMzDPart(d) then
+                    if d.Size.X >= 3 and d.Size.Z >= 3 then
+                        local bottom = d.Position.Y - d.Size.Y / 2
+                        if bottom < lowestBottom then lowestBottom = bottom end
+                    end
+                end
+            end
+            if lowestBottom ~= mhuge then return lowestBottom end
+        end
+
+        -- Fallback: laagste platte NormalFloor/Ground/Baseplate in hele base
         for _, d in pairs(base:GetDescendants()) do
             if d:IsA("BasePart") and not isMzDPart(d) then
                 local n = slower(d.Name)
                 if sfind(n, "floor") or sfind(n, "ground") or sfind(n, "baseplate") then
                     if d.Size.X < 3 or d.Size.Z < 3 then continue end
-                    -- Rond af op 1 decimaal om floating point variatie te negeren
-                    local bottom = d.Position.Y - (d.Size.Y / 2)
-                    local key = math.floor(bottom * 10 + 0.5)  -- round to 1 decimal
-                    heightCounts[key] = (heightCounts[key] or 0) + 1
-                    heightBottoms[key] = bottom
+                    local bottom = d.Position.Y - d.Size.Y / 2
+                    if bottom < lowestBottom then lowestBottom = bottom end
                 end
             end
         end
-        
-        -- Pak de hoogte met de meeste floor tiles
-        local bestKey = nil
-        local bestCount = 0
-        for key, count in pairs(heightCounts) do
-            if count > bestCount then
-                bestCount = count
-                bestKey = key
-            end
-        end
-        
-        if bestKey then return heightBottoms[bestKey] end
+
+        if lowestBottom ~= mhuge then return lowestBottom end
         return getModelTrueBottom(base)
     end
-
 
     local function godMoveModel(obj, deltaY, isBase)
         if isBase and MzD._baseDeltas then
             MzD._baseDeltas[obj] = deltaY
         end
+        -- Verplaats alle descendants (inclusief Slots, Floor1-4, slot brainrots etc.)
         for _, d in pairs(obj:GetDescendants()) do
             if d:IsA("BasePart") and not isMzDPart(d) then
                 tinsert(MzD._godMovedParts, {part = d, origCF = d.CFrame})
                 MzD._godMovedSet[d] = true
                 pcall(function() d.CFrame = d.CFrame + Vector3.new(0, deltaY, 0) end)
+            end
+        end
+        -- Ook directe Model children verplaatsen (bv. "slot 1 brainrot" direct in base)
+        for _, child in pairs(obj:GetChildren()) do
+            if child:IsA("Model") and not isMzDPart(child) then
+                local n = slower(child.Name)
+                if sfind(n, "slot") or sfind(n, "brainrot") or sfind(n, "pet") then
+                    for _, d in pairs(child:GetDescendants()) do
+                        if d:IsA("BasePart") and not isMzDPart(d) and not MzD._godMovedSet[d] then
+                            tinsert(MzD._godMovedParts, {part = d, origCF = d.CFrame})
+                            MzD._godMovedSet[d] = true
+                            pcall(function() d.CFrame = d.CFrame + Vector3.new(0, deltaY, 0) end)
+                        end
+                    end
+                end
             end
         end
     end
