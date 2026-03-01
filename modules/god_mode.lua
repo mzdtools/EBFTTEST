@@ -1,7 +1,8 @@
 -- ============================================
--- [MODULE 10] GOD MODE - NANO EDITION (v26)
--- Fixes: Gesplitste lift! Bases gaan naar +12.5 (staan op de vloer),
--- de toren en shops gaan naar +6.5 (zodat die niet zweven).
+-- [MODULE 10] GOD MODE - NANO EDITION (v27)
+-- Fixes: Volledig dynamische hoogtes! Berekent zelf de bodem van
+-- de base en winkels en lijnt deze strak uit met GodFloorY. 
+-- Inclusief automatische magneet voor nieuw geplaatste brainrots op je eigen base.
 -- ============================================
 
 local M = {}
@@ -406,19 +407,21 @@ function M.init(Modules)
         MzD._godCreatedParts = {}
     end
 
-    -- GECORRIGEERDE LOWERSTRUCTURES (Bases +12.5, Rest +6.5)
+    -- NIEUW: VOLLEDIG DYNAMISCHE UITLIJNING
     local function godLowerStructures()
         MzD._godMovedParts = {}
+        MzD._godMovedSet = {}
+        MzD._baseDeltas = {}
         local targets = {}
         
         if workspace:FindFirstChild("Bases") then
             for _, base in pairs(workspace.Bases:GetChildren()) do 
-                tinsert(targets, {model = base, offsetY = 12.5}) 
+                tinsert(targets, {model = base, isBase = true}) 
             end
         end
         
         local function addNormalTarget(obj)
-            if obj then tinsert(targets, {model = obj, offsetY = 6.5}) end
+            if obj then tinsert(targets, {model = obj, isBase = false}) end
         end
         
         addNormalTarget(workspace:FindFirstChild("DoomWheel"))
@@ -446,9 +449,10 @@ function M.init(Modules)
 
         for _, item in pairs(targets) do
             local obj = item.model
-            local specificTargetY = MzD.S.GodFloorY + item.offsetY
             
+            -- Detecteer de ECHTE bodem van dit object
             local groundY = nil
+            local minY = mhuge
             for _, d in pairs(obj:GetDescendants()) do
                 if d:IsA("BasePart") then
                     local n = slower(d.Name)
@@ -456,24 +460,27 @@ function M.init(Modules)
                         groundY = d.Position.Y
                         break
                     end
-                end
-            end
-            
-            if not groundY then
-                local minY = mhuge
-                for _, d in pairs(obj:GetDescendants()) do
-                    if d:IsA("BasePart") and d.Position.Y < minY then
+                    if d.Position.Y < minY then
                         minY = d.Position.Y
                     end
                 end
-                if minY ~= mhuge then groundY = minY end
             end
+            
+            if not groundY and minY ~= mhuge then groundY = minY end
 
             if groundY then
-                local deltaY = specificTargetY - groundY
+                -- Bereken het exacte verschil (Delta) naar jouw ingestelde GodFloorY
+                local deltaY = MzD.S.GodFloorY - groundY
+                
+                -- Sla het op voor de automatische magneet als het een base is
+                if item.isBase then
+                    MzD._baseDeltas[obj] = deltaY
+                end
+
                 for _, d in pairs(obj:GetDescendants()) do
                     if d:IsA("BasePart") and not isMzDPart(d) then
                         tinsert(MzD._godMovedParts, { part = d, origCF = d.CFrame })
+                        MzD._godMovedSet[d] = true
                         d.CFrame = d.CFrame + Vector3.new(0, deltaY, 0)
                     end
                 end
@@ -492,6 +499,8 @@ function M.init(Modules)
             end
         end
         MzD._godMovedParts = {}
+        MzD._godMovedSet = {}
+        MzD._baseDeltas = {}
     end
 
     local function godTeleportUnder()
@@ -523,6 +532,7 @@ function M.init(Modules)
                     local ch  = Player.Character if not ch then return end
                     local hrp = ch:FindFirstChild("HumanoidRootPart")
                     local hum = ch:FindFirstChild("Humanoid")
+                    
                     if tick() - MzD._godFloorCacheTime > 5 then
                         for _, data in pairs(MzD._godOriginalFloors) do
                             if data.part and data.part.Parent then
@@ -532,6 +542,22 @@ function M.init(Modules)
                         end
                         MzD._godFloorCacheTime = tick()
                     end
+                    
+                    -- NIEUW: Brainrot Magneet voor je eigen base
+                    if MzD.baseGUID and workspace:FindFirstChild("Bases") then
+                        local myBase = workspace.Bases:FindFirstChild(MzD.baseGUID)
+                        if myBase and MzD._baseDeltas and MzD._baseDeltas[myBase] then
+                            local delta = MzD._baseDeltas[myBase]
+                            for _, d in pairs(myBase:GetDescendants()) do
+                                if d:IsA("BasePart") and not isMzDPart(d) and not MzD._godMovedSet[d] then
+                                    tinsert(MzD._godMovedParts, { part = d, origCF = d.CFrame })
+                                    MzD._godMovedSet[d] = true
+                                    d.CFrame = d.CFrame + Vector3.new(0, delta, 0)
+                                end
+                            end
+                        end
+                    end
+
                     if hum then
                         pcall(function()
                             hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
