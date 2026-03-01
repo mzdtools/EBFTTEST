@@ -199,11 +199,11 @@ function M.init(Modules)
     local ATG = ET:AddToggle("ArcadeToggle", {Title = "🕹️ Auto Arcade", Default = false})
     ATG:OnChanged(function(v) if v then MzD.startArcade() else MzD.stopArcade() end end)
 
-    -- NIEUW: Firefice Event
-    ET:AddParagraph({Title = "🔥 Firefice Event", Content = "Auto Firefice coins verzamelen"})
-    local FFSP = ET:AddParagraph({Title = "🪙 Firefice Status", Content = "Idle"})
-    local FFTG = ET:AddToggle("FireficeToggle", {Title = "🔥 Auto Firefice Coins", Default = false})
-    FFTG:OnChanged(function(v) if v then MzD.startFireficeCoinFarm() else MzD.stopFireficeCoinFarm() end end)
+    -- NIEUW: Fire & Ice Event
+    ET:AddParagraph({Title = "🔥 Fire & Ice Event", Content = "Auto Fire & Ice coins verzamelen"})
+    local FISP = ET:AddParagraph({Title = "🪙 Fire & Ice Status", Content = "Idle"})
+    local FITG = ET:AddToggle("FireiceToggle", {Title = "🔥 Auto Fire & Ice Coins", Default = false})
+    FITG:OnChanged(function(v) if v then MzD.startFireice() else MzD.stopFireice() end end)
 
     -- ========== TOOLS TAB ==========
     local AT2 = W:AddTab({Title = "Tools", Icon = "wrench"})
@@ -354,7 +354,7 @@ function M.init(Modules)
         DMSP = DMSP, DMTG = DMTG,
         VSP = VSP, VTG = VTG,
         ASP = ASP, ATG = ATG,
-        FFSP = FFSP, FFTG = FFTG, -- <-- Hier toegevoegd!
+        FISP = FISP, FITG = FITG,
         MSP = MSP, MTG = MTG,
         USP = USP, UTG = UTG,
         MFSP = MFSP, MFTG = MFTG,
