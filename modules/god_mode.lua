@@ -431,36 +431,6 @@ function M.init(Modules)
         return lowestBottom
     end
 
-    -- Vind de vloer via score systeem (voor bases)
-    local function getModelFloorBottom(model)
-        local bestPart = nil
-        local highestScore = -mhuge
-
-        for _, d in pairs(model:GetDescendants()) do
-            if d:IsA("BasePart") and not isMzDPart(d) then
-                local area = d.Size.X * d.Size.Z
-                local n = slower(d.Name)
-                local isFloorName = (n == "ground" or n == "floor" or sfind(n, "baseplate") or n == "main" or n == "pad" or n == "base")
-
-                if d.Size.Y < 15 and area > 50 then
-                    local nameBonus = isFloorName and 100000 or 0
-                    local heightPenalty = d.Position.Y * 10
-                    local score = area + nameBonus - heightPenalty
-
-                    if score > highestScore then
-                        highestScore = score
-                        bestPart = d
-                    end
-                end
-            end
-        end
-
-        if bestPart then
-            return bestPart.Position.Y - (bestPart.Size.Y / 2)
-        end
-        return nil
-    end
-
     local function godMoveModel(obj, deltaY, isBase)
         if isBase and MzD._baseDeltas then
             MzD._baseDeltas[obj] = deltaY
@@ -481,13 +451,13 @@ function M.init(Modules)
 
         local floorTop = MzD.S.GodFloorY + 2  -- bovenkant van onze vloer (4 dik, center = GodFloorY)
 
-        -- ===== 1. ALLE BASES (score-systeem voor vloer) =====
+        -- ===== 1. ALLE BASES (absolute laagste punt) =====
         if workspace:FindFirstChild("Bases") then
             for _, base in pairs(workspace.Bases:GetChildren()) do
-                local bottomY = getModelFloorBottom(base)
-                if bottomY and bottomY ~= mhuge then
-                    local deltaY = floorTop - bottomY
-                    -- Clamp: niet meer dan 500 stuks omhoog of omlaag (voorkomt gekke waarden)
+                local trueBottom = getModelTrueBottom(base)
+                if trueBottom ~= mhuge then
+                    local deltaY = floorTop - trueBottom
+                    -- Clamp: niet meer dan 500 stuks verplaatsen (voorkomt gekke waarden)
                     if mabs(deltaY) < 500 then
                         godMoveModel(base, deltaY, true)
                     end
@@ -519,8 +489,7 @@ function M.init(Modules)
                 if root then
                     -- Objecten die op de absolute bodem moeten landen
                     local trueBottomTargets = {
-                        "UpgradeShop", "MysteryMerchant", "SiteEventDetails",
-                        "PlazaPortal",
+                        "MysteryMerchant", "SiteEventDetails", "PlazaPortal",
                     }
                     for _, name in pairs(trueBottomTargets) do
                         local obj = root:FindFirstChild(name)
@@ -531,6 +500,18 @@ function M.init(Modules)
                                 if mabs(deltaY) < 500 then
                                     godMoveModel(obj, deltaY, false)
                                 end
+                            end
+                        end
+                    end
+                    
+                    -- UpgradeShop: zit iets te hoog, kleine extra neerwaartse offset
+                    local upgradeShop = root:FindFirstChild("UpgradeShop")
+                    if upgradeShop then
+                        local trueBottom = getModelTrueBottom(upgradeShop)
+                        if trueBottom ~= mhuge then
+                            local deltaY = (floorTop - trueBottom) - 2  -- 2 studs extra omlaag
+                            if mabs(deltaY) < 500 then
+                                godMoveModel(upgradeShop, deltaY, false)
                             end
                         end
                     end
@@ -652,23 +633,10 @@ function M.init(Modules)
                             if not (MzD._baseDeltas and MzD._baseDeltas[myBase]) then
                                 if MzD._baseDeltas then
                                     local floorTop = MzD.S.GodFloorY + 2
-                                    local bottomY = nil
-                                    -- Score systeem voor bodem
-                                    local bestPart, highestScore = nil, -mhuge
-                                    for _, d in pairs(myBase:GetDescendants()) do
-                                        if d:IsA("BasePart") and not isMzDPart(d) then
-                                            local area = d.Size.X * d.Size.Z
-                                            local n = slower(d.Name)
-                                            local bonus = (n == "ground" or n == "floor" or sfind(n,"base") or n == "pad") and 100000 or 0
-                                            if d.Size.Y < 15 and area > 50 then
-                                                local score = area + bonus - d.Position.Y * 10
-                                                if score > highestScore then highestScore = score bestPart = d end
-                                            end
-                                        end
-                                    end
-                                    if bestPart then bottomY = bestPart.Position.Y - bestPart.Size.Y/2 end
-                                    if bottomY then
-                                        local delta = floorTop - bottomY
+                                    -- Gebruik absolute laagste punt (zelfde als godLowerStructures)
+                                    local trueBottom = getModelTrueBottom(myBase)
+                                    if trueBottom ~= mhuge then
+                                        local delta = floorTop - trueBottom
                                         if mabs(delta) < 500 then
                                             MzD._baseDeltas[myBase] = delta
                                             for _, d in pairs(myBase:GetDescendants()) do
