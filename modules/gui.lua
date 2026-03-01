@@ -1,5 +1,5 @@
 -- ============================================
--- [MODULE 27] GUI (FLUENT UI) - CLEAN VERSION
+-- [MODULE 27] GUI (FLUENT UI) - CLEAN
 -- ============================================
 
 local M = {}
@@ -49,12 +49,8 @@ function M.init(Modules)
     local FM   = {"Collect", "Collect, Place & Max"}
     local LBR  = {"Any","Common","Uncommon","Rare","Epic","Legendary","Mythical","Cosmic","Secret","Celestial","Divine","Infinity","Admin","UFO","Candy","Money"}
     local SL   = {} for i = 1, 40 do tinsert(SL, tostring(i)) end
-    local SPD  = {"200","400","600","800","1000","1500","2000","3000","4000","INSTANT"}
-    local SPM  = {["200"]=200,["400"]=400,["600"]=600,["800"]=800,["1000"]=1000,["1500"]=1500,["2000"]=2000,["3000"]=3000,["4000"]=4000,["INSTANT"]=9999}
-    local CSPD = {"100","200","300","400","500","600","800","1000","1500","2000"}
     local GODWALKY  = {"5","3","1","0","-1","-2","-3","-5","-8","-10","-15"}
     local GODFLOORY = {"15","12","10","8","5","3","0","-3","-5","-8","-10","-15","-20"}
-    local THEMES    = {"Auto","Dark","Doom","Valentine","UFO","Bright"}
 
     local W = Fluent:CreateWindow({
         Title       = "MzD Hub",
@@ -72,12 +68,28 @@ function M.init(Modules)
 
     -- ========== FARM TAB ==========
     local FT  = W:AddTab({Title = "Farm", Icon = "leaf"})
-    local BDD = nil
+    
+    -- Tower Trial Farm (Bovenaan)
+    local TTTG = FT:AddToggle("TowerTrialToggle", {Title = "🏆 Auto Tower Trial Farm", Default = false})
+    TTTG:OnChanged(function(v)
+        if v then
+            MzD.startTowerTrial()
+            MzD.startTrialHUD()
+        else
+            MzD.stopTowerTrial()
+            MzD.stopTrialHUD()
+        end
+    end)
+    FT:AddDropdown("TowerTrialSlot", {Title = "📦 Werkslot (referentie)", Values = SL, Default = "5", Multi = false}):OnChanged(function(v)
+        MzD.S.TowerTrialSlot = v
+    end)
 
-    local FTG = FT:AddToggle("FarmToggle", {Title = "🌾 Auto Farm", Default = false})
+    -- Auto Farm
+    local BDD = nil
+    local FTG = FT:AddToggle("FarmToggle", {Title = "🌾 Auto Farm", Default = true})
     FTG:OnChanged(function(v) if v then MzD.findBase() MzD.startFarming() else MzD.stopFarming() end end)
 
-    local RDD = FT:AddDropdown("FarmRarity", {Title = "⭐ Rarity", Values = RAR, Default = {"Common"}, Multi = true})
+    local RDD = FT:AddDropdown("FarmRarity", {Title = "⭐ Rarity", Values = RAR, Default = {"Divine", "Infinity"}, Multi = true})
     RDD:OnChanged(function(v)
         local s = {} for n, on in pairs(v) do if on then tinsert(s, n) end end
         if #s == 0 then s = {"Common"} end
@@ -99,53 +111,13 @@ function M.init(Modules)
     FT:AddSlider("FarmMaxLevel",   {Title = "📈 Max Level", Default = MzD.S.MaxLevel, Min = 1, Max = 500, Rounding = 0}):OnChanged(function(v) MzD.S.MaxLevel = mfloor(v) end)
 
     -- Lucky Blocks
-    local LBTG = FT:AddToggle("LBToggle", {Title = "🎲 Auto Lucky Blocks", Default = false})
+    local LBTG = FT:AddToggle("LBToggle", {Title = "🎲 Auto Lucky Blocks", Default = true})
     LBTG:OnChanged(function(v) if v then MzD.findBase() MzD.startLuckyBlockFarm() else MzD.stopLuckyBlockFarm() end end)
-    FT:AddDropdown("LBRarity",   {Title = "⭐ LB Rarity",  Values = LBR, Default = {"Common"}, Multi = true}):OnChanged(function(v)
+    FT:AddDropdown("LBRarity",   {Title = "⭐ LB Rarity",  Values = LBR, Default = {"Divine", "Infinity"}, Multi = true}):OnChanged(function(v)
         local s = {} for n, on in pairs(v) do if on then tinsert(s, n) end end
         if #s == 0 then s = {"Common"} end MzD.S.LuckyBlockRarity = s
     end)
     FT:AddDropdown("LBMutation", {Title = "💎 LB Mutatie", Values = MUT, Default = "Any", Multi = false}):OnChanged(function(v) MzD.S.LuckyBlockMutation = v end)
-
-    -- Tower Trial Farm
-    local TTTG = FT:AddToggle("TowerTrialToggle", {Title = "🏆 Auto Tower Trial Farm", Default = false})
-    TTTG:OnChanged(function(v)
-        if v then
-            MzD.startTowerTrial()
-            MzD.startTrialHUD()
-        else
-            MzD.stopTowerTrial()
-            MzD.stopTrialHUD()
-        end
-    end)
-    FT:AddDropdown("TowerTrialSlot", {Title = "📦 Werkslot (referentie)", Values = SL, Default = "5", Multi = false}):OnChanged(function(v)
-        MzD.S.TowerTrialSlot = v
-    end)
-    FT:AddSlider("TowerTrialFallbackCd", {Title = "⏱️ Fallback Cooldown (sec)", Default = 305, Min = 60, Max = 600, Rounding = 0}):OnChanged(function(v)
-        MzD.S.TowerTrialFallbackCd = mfloor(v)
-    end)
-
-    -- Walk Y fine-tune
-    FT:AddButton({Title = "Walk Y  −3", Callback = function()
-        MzD.S.GodWalkY = (MzD.S.GodWalkY or 0) - 3
-        Fluent:Notify({Title="🚶 Walk Y", Content="Walk Y: "..MzD.S.GodWalkY, Duration=2})
-        if MzD._isGod then pcall(function() god_mod.godTeleportUnder() end) end
-    end})
-    FT:AddButton({Title = "Walk Y  −1", Callback = function()
-        MzD.S.GodWalkY = (MzD.S.GodWalkY or 0) - 1
-        Fluent:Notify({Title="🚶 Walk Y", Content="Walk Y: "..MzD.S.GodWalkY, Duration=2})
-        if MzD._isGod then pcall(function() god_mod.godTeleportUnder() end) end
-    end})
-    FT:AddButton({Title = "Walk Y  +1", Callback = function()
-        MzD.S.GodWalkY = (MzD.S.GodWalkY or 0) + 1
-        Fluent:Notify({Title="🚶 Walk Y", Content="Walk Y: "..MzD.S.GodWalkY, Duration=2})
-        if MzD._isGod then pcall(function() god_mod.godTeleportUnder() end) end
-    end})
-    FT:AddButton({Title = "Walk Y  +3", Callback = function()
-        MzD.S.GodWalkY = (MzD.S.GodWalkY or 0) + 3
-        Fluent:Notify({Title="🚶 Walk Y", Content="Walk Y: "..MzD.S.GodWalkY, Duration=2})
-        if MzD._isGod then pcall(function() god_mod.godTeleportUnder() end) end
-    end})
 
     -- ========== FACTORY TAB ==========
     local FCT = W:AddTab({Title = "Factory", Icon = "factory"})
@@ -162,31 +134,16 @@ function M.init(Modules)
     -- ========== EVENTS TAB ==========
     local ET = W:AddTab({Title = "Events", Icon = "party-popper"})
 
-    local DMTG = ET:AddToggle("DoomToggle", {Title = "🪙 Auto Doom Coins", Default = false})
+    local DMTG = ET:AddToggle("DoomToggle", {Title = "🌋 Collect Auto Doom Coins", Default = true})
     DMTG:OnChanged(function(v) if v then MzD.startDoomCollector() else MzD.stopDoomCollector() end end)
 
-    local VTG = ET:AddToggle("ValentineToggle", {Title = "💝 Auto Valentine", Default = false})
+    local VTG = ET:AddToggle("ValentineToggle", {Title = "💝 Auto Collect Hearts and Candy", Default = true})
     VTG:OnChanged(function(v) if v then MzD.startValentine() else MzD.stopValentine() end end)
-    
-    ET:AddButton({Title = "💝 Check Valentine Info", Callback = function()
-        local coinFolder  = workspace:FindFirstChild("ValentinesCoinParts")
-        local candyFolder = workspace:FindFirstChild("CandyEventParts")
-        local info = "Hearts: "..MzD.getHeartCount().."/100"
-        info = info.."\nCoinParts: "..(coinFolder and #coinFolder:GetChildren() or 0).." (cached: "..#MzD._valentineCachedParts..")"
-        info = info.."\nCandyParts: "..(candyFolder and #candyFolder:GetChildren() or 0).." (cached: "..#MzD._candyCachedParts..")"
-        local station = MzD.findCandyGramStation()
-        info = info.."\nStation: "..(station and station.Name or "NIET GEVONDEN")
-        Fluent:Notify({Title="💝 Valentine Info", Content=info, Duration=8})
-    end})
-    ET:AddButton({Title = "💝 Submit Valentine Nu (1x)", Callback = function()
-        local ok = MzD.submitCandyGrams()
-        Fluent:Notify({Title="💝 Submit", Content=(ok and "Gefired!" or "Mislukt").."\nHearts nu: "..MzD.getHeartCount(), Duration=4})
-    end})
 
-    local ATG = ET:AddToggle("ArcadeToggle", {Title = "🕹️ Auto Arcade", Default = false})
+    local ATG = ET:AddToggle("ArcadeToggle", {Title = "🕹️ Auto collect controllers & coins", Default = true})
     ATG:OnChanged(function(v) if v then MzD.startArcade() else MzD.stopArcade() end end)
 
-    local FITG = ET:AddToggle("FireiceToggle", {Title = "🔥 Auto Fire & Ice Coins", Default = false})
+    local FITG = ET:AddToggle("FireiceToggle", {Title = "🔥 Auto Fire & Ice Coins", Default = true})
     FITG:OnChanged(function(v) if v then MzD.startFireice() else MzD.stopFireice() end end)
 
     -- ========== TOOLS TAB ==========
@@ -200,23 +157,9 @@ function M.init(Modules)
 
     local MFTG = AT2:AddToggle("MapToggle", {Title = "🗺️ Auto Map Fixer", Default = false})
     MFTG:OnChanged(function(v) if v then MzD.startMapFixer() else MzD.stopMapFixer() end end)
-    
-    AT2:AddButton({Title = "🗺️ Fix Map Nu", Callback = function()
-        MzD._lastFixedMapName = "" pcall(function() MzD.mapRunFix() end)
-        Fluent:Notify({Title="🗺️ Map", Content="Fix uitgevoerd!", Duration=3})
-    end})
-    AT2:AddButton({Title = "🗑️ Verwijder Map Deco", Callback = function()
-        local map = MzD.mapFindCurrentMap()
-        if map then
-            local n = MzD.removeMapDeco(map)
-            Fluent:Notify({Title="🗑️ Deco", Content="Verwijderd: "..map.Name.." ("..n.."x)", Duration=4})
-        else Fluent:Notify({Title="🗑️ Deco", Content="Geen map", Duration=3}) end
-    end})
 
     local GDTG = AT2:AddToggle("GodToggle", {Title = "😇 God Mode", Default = false})
     GDTG:OnChanged(function(v) if v then MzD.enableGod() else MzD.disableGod() end end)
-    
-    AT2:AddButton({Title = "📍 Teleport Onder Base", Callback = function() if MzD._isGod then god_mod.godTeleportUnder() end end})
     
     AT2:AddDropdown("GodWalkY",  {Title = "🚶 Loop Y Offset",  Values = GODWALKY,  Default = "0",   Multi = false}):OnChanged(function(v)
         MzD.S.GodWalkY = tonumber(v) or 0
@@ -242,71 +185,6 @@ function M.init(Modules)
     
     local AFKTG = AT2:AddToggle("AFKToggle", {Title = "🕐 Anti-AFK", Default = false})
     AFKTG:OnChanged(function(v) if v then MzD.startAFK() else MzD.stopAFK() end end)
-
-    -- ========== CONFIG TAB ==========
-    local CT = W:AddTab({Title = "Config", Icon = "settings"})
-
-    CT:AddDropdown("TweenSpeed",    {Title = "🏃 Farm Speed",     Values = SPD,    Default = "INSTANT", Multi = false}):OnChanged(function(v) MzD.S.TweenSpeed    = SPM[v] or 9999 end)
-    CT:AddDropdown("CorridorSpeed", {Title = "🛤️ Corridor Speed", Values = CSPD,   Default = "1500",    Multi = false}):OnChanged(function(v) MzD.S.CorridorSpeed = tonumber(v) or 1500 end)
-    CT:AddDropdown("WallTheme",     {Title = "🎨 Vloer Thema",    Values = THEMES, Default = "Auto",    Multi = false}):OnChanged(function(v)
-        MzD.S.WallTheme = v MzD._lastFixedMapName = ""
-        pcall(function() MzD.mapRunFix() end)
-        if MzD._isGod then MzD.disableGod() twait(0.3) MzD.enableGod() end
-    end)
-
-    CT:AddSlider("GuiScale", {Title = "🔎 GUI Schaal %", Default = 100, Min = 50, Max = 150, Rounding = 0}):OnChanged(function(v)
-        local scale = mfloor(v / 10 + 0.5) * 10 / 100
-        MzD.S.GuiScale = scale
-        pcall(function()
-            local root = W.Main
-            if not root then return end
-            local uiScale = root:FindFirstChildOfClass("UIScale")
-            if not uiScale then
-                uiScale = Instance.new("UIScale")
-                uiScale.Parent = root
-            end
-            uiScale.Scale = scale
-        end)
-    end)
-
-    CT:AddButton({Title = "🔄 Herlaad Brainrot Lijst", Callback = function()
-        MzD.S.SelectedBrainrots = {}
-        pcall(function() BDD:SetValues(MzD.getBrainrotNamesMulti(MzD.S.TargetRarity)) BDD:SetValue({}) end)
-        Fluent:Notify({Title="✅ Herlaad", Content="Brainrot lijst vernieuwd", Duration=3})
-    end})
-    CT:AddButton({Title = "🔍 Zoek Base Handmatig", Callback = function()
-        MzD.findBase()
-        Fluent:Notify({Title="🏠 Base", Content="GUID: "..(MzD.baseGUID or "?").."\nSlots: "..MzD.getSlotCount(), Duration=5})
-    end})
-    CT:AddButton({Title = "📍 Sla Home Positie Op", Callback = function()
-        MzD.setHomePosition()
-        Fluent:Notify({Title="📍 Home", Content="Opgeslagen!", Duration=3})
-    end})
-    CT:AddButton({Title = "📋 Log Bezette Slots", Callback = function()
-        MzD.findBase()
-        local o = MzD.findOccupiedSlots()
-        local info = ""
-        for _, s in pairs(o) do info = info.."S"..s.slot..":"..s.name.." L"..s.level.."\n" end
-        Fluent:Notify({Title="📦 Slots ("..#o.."/"..MzD.getSlotCount()..")", Content=#o>0 and info or "Leeg!", Duration=8})
-    end})
-    CT:AddButton({Title = "🗑️ Leeg Huidig Farm Slot", Callback = function()
-        MzD.findBase() MzD.clearSlot(tonumber(MzD.S.FarmSlot) or 5)
-        Fluent:Notify({Title="🗑️ Slot", Content="Slot "..MzD.S.FarmSlot.." geleegd", Duration=3})
-    end})
-    CT:AddButton({Title = "🏠 Teleport Naar Base", Callback = function() MzD.findBase() MzD.returnToBase() end})
-    CT:AddButton({Title = "📡 Print Debug Info",   Callback = function()
-        local info = "God:"..(MzD._isGod and "AAN" or "UIT")
-        info = info.."\nWalk:"..MzD.S.GodWalkY.." Floor:"..MzD.S.GodFloorY
-        info = info.."\nDoom:"..(MzD.S.DoomEnabled and "AAN" or "UIT").." Parts:"..#MzD._doomCachedParts
-        local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then info = info.."\nPlayer Y:"..sformat("%.1f",hrp.Position.Y) end
-        info = info.."\nGUID:"..(MzD.baseGUID or "?").."\nSlots:"..MzD.getSlotCount()
-        info = info.."\nRemote:"..(MzD.PlotAction and "OK" or "NIET GEVONDEN!")
-        info = info.."\nCandy:"..#MzD._candyCachedParts
-        info = info.."\nTrial:"..(MzD._towerTrialEnabled and "AAN" or "UIT").." #"..MzD.Status.towerTrialCount
-        info = info.."\nScale:"..mfloor(MzD.S.GuiScale*100).."%"
-        Fluent:Notify({Title="📡 Debug v13.0", Content=info, Duration=12})
-    end})
 
     -- ========== SETTINGS TAB ==========
     local ST2 = W:AddTab({Title = "Settings", Icon = "shield"})
