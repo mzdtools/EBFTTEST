@@ -433,20 +433,25 @@ function M.init(Modules)
         return lowestBottom
     end
 
-    -- Vind de vloer van een base: zoek LeftFloor/RightFloor/Floor/Ground namen, pak de laagste
+    -- Vind de vloer van een base: zoek LeftFloor/RightFloor/Floor namen
+    -- Pak de HOOGSTE vloer want dat is waar de brainrots op staan (bovenste verdieping)
     local function getBaseFloorBottom(base)
-        local lowestFloor = mhuge
+        local highestFloor = -mhuge
+        local highestBottom = -mhuge
         for _, d in pairs(base:GetDescendants()) do
             if d:IsA("BasePart") and not isMzDPart(d) then
                 local n = slower(d.Name)
                 if sfind(n, "floor") or sfind(n, "ground") or sfind(n, "baseplate") then
                     local bottom = d.Position.Y - (d.Size.Y / 2)
-                    if bottom < lowestFloor then lowestFloor = bottom end
+                    -- Pak de hoogste vloer (bovenste verdieping waar brainrots op staan)
+                    if bottom > highestBottom then
+                        highestBottom = bottom
+                    end
                 end
             end
         end
-        if lowestFloor == mhuge then return getModelTrueBottom(base) end
-        return lowestFloor
+        if highestBottom == -mhuge then return getModelTrueBottom(base) end
+        return highestBottom
     end
 
 
