@@ -414,28 +414,41 @@ function M.init(Modules)
     -- STRUCTUREN VERLAGEN (v30: fixes voor eigen base, zwevers, doorzakkers)
     -- ==========================================
 
-    -- Vind de echte onderkant van een model, skip radius/paal/antenne parts
+    -- Vind de echte onderkant van een model, skip radius/dak/paal/antenne parts
     local function getModelTrueBottom(model)
         local lowestBottom = mhuge
         for _, d in pairs(model:GetDescendants()) do
             if d:IsA("BasePart") and not isMzDPart(d) then
                 local n = slower(d.Name)
-                -- Skip Radius parts (onzichtbare interactie-cilinders)
                 if n == "radius" then continue end
-                -- Skip extreem hoge objecten (vlaggen, antennes)
+                if n == "roof" then continue end
+                if n == "ceiling" then continue end
                 if d.Position.Y > 200 then continue end
-                -- Skip dunne lange palen: SizeY > 10 en meer dan 2x groter dan breedte
                 local maxXZ = d.Size.X > d.Size.Z and d.Size.X or d.Size.Z
                 if d.Size.Y > 10 and d.Size.Y > maxXZ * 2 then continue end
-
                 local bottom = d.Position.Y - (d.Size.Y / 2)
-                if bottom < lowestBottom then
-                    lowestBottom = bottom
-                end
+                if bottom < lowestBottom then lowestBottom = bottom end
             end
         end
         return lowestBottom
     end
+
+    -- Vind de vloer van een base: zoek LeftFloor/RightFloor/Floor/Ground namen, pak de laagste
+    local function getBaseFloorBottom(base)
+        local lowestFloor = mhuge
+        for _, d in pairs(base:GetDescendants()) do
+            if d:IsA("BasePart") and not isMzDPart(d) then
+                local n = slower(d.Name)
+                if sfind(n, "floor") or sfind(n, "ground") or sfind(n, "baseplate") then
+                    local bottom = d.Position.Y - (d.Size.Y / 2)
+                    if bottom < lowestFloor then lowestFloor = bottom end
+                end
+            end
+        end
+        if lowestFloor == mhuge then return getModelTrueBottom(base) end
+        return lowestFloor
+    end
+
 
     local function godMoveModel(obj, deltaY, isBase)
         if isBase and MzD._baseDeltas then
@@ -460,7 +473,7 @@ function M.init(Modules)
         -- ===== 1. ALLE BASES (absolute laagste punt) =====
         if workspace:FindFirstChild("Bases") then
             for _, base in pairs(workspace.Bases:GetChildren()) do
-                local trueBottom = getModelTrueBottom(base)
+                local trueBottom = getBaseFloorBottom(base)
                 if trueBottom ~= mhuge then
                     local deltaY = floorTop - trueBottom
                     -- Clamp: niet meer dan 500 stuks verplaatsen (voorkomt gekke waarden)
@@ -488,6 +501,30 @@ function M.init(Modules)
         tryMoveWorkspaceObj("FireAndIceWheel")
         tryMoveWorkspaceObj("DivineLuckyBlockPad")
         tryMoveWorkspaceObj("MysteryMerchant")
+
+        -- Mystery Merchant kan ook als naamloos "Model" in workspace zitten
+        -- Zoek via descendants naar een part genaamd "MysteryMerchant" of via label
+        for _, c in pairs(workspace:GetChildren()) do
+            if c:IsA("Model") and c.Name == "Model" then
+                -- Check of het een merchant is via children namen
+                local isMerchant = false
+                for _, d in pairs(c:GetDescendants()) do
+                    local dn = slower(d.Name)
+                    if sfind(dn, "merchant") or sfind(dn, "mystery") then
+                        isMerchant = true break
+                    end
+                end
+                if isMerchant then
+                    local trueBottom = getModelTrueBottom(c)
+                    if trueBottom ~= mhuge then
+                        local deltaY = floorTop - trueBottom
+                        if mabs(deltaY) < 500 then
+                            godMoveModel(c, deltaY, false)
+                        end
+                    end
+                end
+            end
+        end
 
         -- ===== 3. GAME OBJECTS (Shops, Portals, Machines) =====
         local go = workspace:FindFirstChild("GameObjects")
@@ -596,6 +633,7 @@ function M.init(Modules)
     M.godTeleportUnder = godTeleportUnder
     M.godBuildEgaleVloer = godBuildEgaleVloer
     M.godDisableKillParts = godDisableKillParts
+    M.reapplyGodFloor = function() MzD.reapplyGodFloor() end
 
     -- ==========================================
     -- GOD LOOP (uit v28 + magneet van v29)
@@ -643,7 +681,7 @@ function M.init(Modules)
                                 if MzD._baseDeltas then
                                     local floorTop = MzD.S.GodFloorY + 2
                                     -- Gebruik absolute laagste punt (zelfde als godLowerStructures)
-                                    local trueBottom = getModelTrueBottom(myBase)
+                                    local trueBottom = getBaseFloorBottom(myBase)
                                     if trueBottom ~= mhuge then
                                         local delta = floorTop - trueBottom
                                         if mabs(delta) < 500 then
@@ -755,6 +793,29 @@ function M.init(Modules)
         twait(0.1)
         if Player.Character then godSetupHealth(Player.Character) end
         MzD.Status.god = "Aan (Y="..MzD.S.GodWalkY.." K:"..killCount.." NanoVloer)"
+    end
+
+    -- Herbereken alles als GodFloorY verandert via dropdown (dynamisch)
+    function MzD.reapplyGodFloor()
+        if not MzD._isGod then return end
+        -- Herstel structuren naar origineel
+        godRestoreStructures()
+        -- Herstel vloer
+        godRestoreFloors()
+        -- Verwijder oude nanvloer
+        for _, p in pairs(MzD._godCreatedParts or {}) do
+            pcall(function() if p and p.Parent then p:Destroy() end end)
+        end
+        MzD._godCreatedParts = {}
+        -- Herbereken
+        local map = godHideOriginalFloors()
+        twait(0.05)
+        godLowerStructures()
+        twait(0.05)
+        godBuildEgaleVloer(map)
+        twait(0.05)
+        godTeleportUnder()
+        MzD.Status.god = "Aan (Y="..MzD.S.GodWalkY.." NanoVloer)"
     end
 
     function MzD.disableGod()
