@@ -433,38 +433,35 @@ function M.init(Modules)
         return lowestBottom
     end
 
-    -- Vind de vloer van een base: pak Floor1 = de laagste platte NormalFloor
-    -- Floor1 is de begane grond, Floor2/3/4 staan er automatisch correct boven
+    -- Vind de vloer van een base via Floor1 folder (laagste bottom)
+    -- Floor1 = begane grond waar slot 1-10 brainrots op staan
     local function getBaseFloorBottom(base)
-        local lowestBottom = mhuge
-
-        -- Probeer eerst via Floor1 folder direct
+        -- Stap 1: zoek Floor1 folder direct
         local floor1 = base:FindFirstChild("Floor1")
         if floor1 then
+            local lowestBottom = mhuge
             for _, d in pairs(floor1:GetDescendants()) do
                 if d:IsA("BasePart") and not isMzDPart(d) then
-                    if d.Size.X >= 3 and d.Size.Z >= 3 then
-                        local bottom = d.Position.Y - d.Size.Y / 2
-                        if bottom < lowestBottom then lowestBottom = bottom end
-                    end
+                    local bottom = d.Position.Y - d.Size.Y / 2
+                    if bottom < lowestBottom then lowestBottom = bottom end
                 end
             end
             if lowestBottom ~= mhuge then return lowestBottom end
         end
 
-        -- Fallback: laagste platte NormalFloor/Ground/Baseplate in hele base
-        for _, d in pairs(base:GetDescendants()) do
-            if d:IsA("BasePart") and not isMzDPart(d) then
-                local n = slower(d.Name)
-                if sfind(n, "floor") or sfind(n, "ground") or sfind(n, "baseplate") then
-                    if d.Size.X < 3 or d.Size.Z < 3 then continue end
-                    local bottom = d.Position.Y - d.Size.Y / 2
-                    if bottom < lowestBottom then lowestBottom = bottom end
-                end
+        -- Stap 2: geen Floor1 → pak laagste part van de Slots folder
+        local slots = base:FindFirstChild("Slots")
+        if slots then
+            local lowestY = mhuge
+            for _, s in pairs(slots:GetChildren()) do
+                local pp = s.PrimaryPart or s:FindFirstChildWhichIsA("BasePart")
+                if pp and pp.Position.Y < lowestY then lowestY = pp.Position.Y end
             end
+            -- Slots staan OP de vloer, vloer bottom ≈ slot Y - ~2
+            if lowestY ~= mhuge then return lowestY - 2 end
         end
 
-        if lowestBottom ~= mhuge then return lowestBottom end
+        -- Stap 3: fallback op getModelTrueBottom
         return getModelTrueBottom(base)
     end
 
