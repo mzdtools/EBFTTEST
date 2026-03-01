@@ -1,5 +1,5 @@
 -- ============================================
--- [MODULE 27] GUI (FLUENT UI) - CLEAN
+-- [MODULE 27] GUI (FLUENT UI) - SUPER CLEAN
 -- ============================================
 
 local M = {}
@@ -80,9 +80,6 @@ function M.init(Modules)
             MzD.stopTrialHUD()
         end
     end)
-    FT:AddDropdown("TowerTrialSlot", {Title = "📦 Werkslot (referentie)", Values = SL, Default = "5", Multi = false}):OnChanged(function(v)
-        MzD.S.TowerTrialSlot = v
-    end)
 
     -- Auto Farm
     local BDD = nil
@@ -113,7 +110,7 @@ function M.init(Modules)
     -- Lucky Blocks
     local LBTG = FT:AddToggle("LBToggle", {Title = "🎲 Auto Lucky Blocks", Default = true})
     LBTG:OnChanged(function(v) if v then MzD.findBase() MzD.startLuckyBlockFarm() else MzD.stopLuckyBlockFarm() end end)
-    FT:AddDropdown("LBRarity",   {Title = "⭐ LB Rarity",  Values = LBR, Default = {"Divine", "Infinity"}, Multi = true}):OnChanged(function(v)
+    FT:AddDropdown("LBRarity",   {Title = "⭐ LB Rarity",  Values = LBR, Default = {"Divine", "Infinity", "Admin"}, Multi = true}):OnChanged(function(v)
         local s = {} for n, on in pairs(v) do if on then tinsert(s, n) end end
         if #s == 0 then s = {"Common"} end MzD.S.LuckyBlockRarity = s
     end)
@@ -183,7 +180,7 @@ function M.init(Modules)
         MzD.S.InstantPickup = v if v then MzD.setupInstant() end
     end)
     
-    local AFKTG = AT2:AddToggle("AFKToggle", {Title = "🕐 Anti-AFK", Default = false})
+    local AFKTG = AT2:AddToggle("AFKToggle", {Title = "🕐 Anti-AFK", Default = true})
     AFKTG:OnChanged(function(v) if v then MzD.startAFK() else MzD.stopAFK() end end)
 
     -- ========== SETTINGS TAB ==========
