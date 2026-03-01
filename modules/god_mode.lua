@@ -1,8 +1,8 @@
 -- ============================================
--- [MODULE 10] GOD MODE - NANO EDITION (v27)
--- Fixes: Volledig dynamische hoogtes! Berekent zelf de bodem van
--- de base en winkels en lijnt deze strak uit met GodFloorY. 
--- Inclusief automatische magneet voor nieuw geplaatste brainrots op je eigen base.
+-- [MODULE 10] GOD MODE - NANO EDITION (v28)
+-- Fixes: Geen abstracte kunst of gaten in de vloer meer! 
+-- Slimme bodemdetectie via Score Systeem en actieve 
+-- magneet voor nieuwe brainrots op je eigen base.
 -- ============================================
 
 local M = {}
@@ -407,7 +407,7 @@ function M.init(Modules)
         MzD._godCreatedParts = {}
     end
 
-    -- NIEUW: VOLLEDIG DYNAMISCHE UITLIJNING
+    -- NIEUW: SCORE SYSTEEM VOOR BODEM DETECTIE + MAGNEET
     local function godLowerStructures()
         MzD._godMovedParts = {}
         MzD._godMovedSet = {}
@@ -450,29 +450,38 @@ function M.init(Modules)
         for _, item in pairs(targets) do
             local obj = item.model
             
-            -- Detecteer de ECHTE bodem van dit object
-            local groundY = nil
-            local minY = mhuge
+            -- Score systeem om de echte vloer te vinden
+            local bestPart = nil
+            local highestScore = -mhuge
+            
             for _, d in pairs(obj:GetDescendants()) do
-                if d:IsA("BasePart") then
+                if d:IsA("BasePart") and not isMzDPart(d) then
+                    local area = d.Size.X * d.Size.Z
                     local n = slower(d.Name)
-                    if n == "ground" or n == "floor" or sfind(n, "baseplate") then
-                        groundY = d.Position.Y
-                        break
-                    end
-                    if d.Position.Y < minY then
-                        minY = d.Position.Y
+                    local isFloorName = (n == "ground" or n == "floor" or sfind(n, "baseplate") or n == "main" or n == "pad")
+                    
+                    -- Eisen: Niet hoger dan 15 (geen muren), en redelijk oppervlak
+                    if d.Size.Y < 15 and area > 50 then
+                        local nameBonus = isFloorName and 100000 or 0
+                        local heightPenalty = d.Position.Y * 10 -- Hoe hoger in de lucht, hoe meer strafpunten
+                        local score = area + nameBonus - heightPenalty
+                        
+                        if score > highestScore then
+                            highestScore = score
+                            bestPart = d
+                        end
                     end
                 end
             end
-            
-            if not groundY and minY ~= mhuge then groundY = minY end
 
-            if groundY then
-                -- Bereken het exacte verschil (Delta) naar jouw ingestelde GodFloorY
-                local deltaY = MzD.S.GodFloorY - groundY
+            if bestPart then
+                -- Bottom is het absolute middelpunt min de helft van de dikte
+                local bottomY = bestPart.Position.Y - (bestPart.Size.Y / 2)
                 
-                -- Sla het op voor de automatische magneet als het een base is
+                -- De vloer is 4 dik op GodFloorY, dus de top is GodFloorY + 2. We plaatsen ze exact hierop.
+                local targetY = MzD.S.GodFloorY + 2
+                local deltaY = targetY - bottomY
+                
                 if item.isBase then
                     MzD._baseDeltas[obj] = deltaY
                 end
@@ -543,7 +552,7 @@ function M.init(Modules)
                         MzD._godFloorCacheTime = tick()
                     end
                     
-                    -- NIEUW: Brainrot Magneet voor je eigen base
+                    -- NIEUW: Actieve Magneet voor verse brainrots
                     if MzD.baseGUID and workspace:FindFirstChild("Bases") then
                         local myBase = workspace.Bases:FindFirstChild(MzD.baseGUID)
                         if myBase and MzD._baseDeltas and MzD._baseDeltas[myBase] then
