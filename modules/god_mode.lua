@@ -1,8 +1,6 @@
 -- ============================================
--- [MODULE 10] GOD MODE - REVERSE EDITION (v33)
--- Fixes: Geen modellen of brainrots meer verplaatsen! 
--- Schuift de Nano-Vloer op de natuurlijke hoogte van de map. 
--- 100% bug-vrij voor physics en NPC's.
+-- [MODULE 10] GOD MODE - REVERSE EDITION (v33 fixed)
+-- Nano-vloer op natuurlijke hoogte van de map.
 -- ============================================
 
 local M = {}
@@ -27,25 +25,26 @@ function M.init(Modules)
 
     -- ==========================================
     -- NATUURLIJKE HOOGTE BEPALEN
+    -- Gebruik de BOVENKANT van Floor1 (= waar de brainrots op staan)
     -- ==========================================
     local function getMapNaturalY()
-        -- Zoek naar de onderkant van Floor1 van eender welke base (meest betrouwbare anker)
         if workspace:FindFirstChild("Bases") then
             for _, b in pairs(workspace.Bases:GetChildren()) do
                 local floor1 = b:FindFirstChild("Floor1")
                 if floor1 then
-                    local lowestBottom = mhuge
+                    local highestTop = -mhuge
                     for _, d in pairs(floor1:GetDescendants()) do
                         if d:IsA("BasePart") and not isMzDPart(d) then
-                            local bottom = d.Position.Y - (d.Size.Y / 2)
-                            if bottom < lowestBottom then lowestBottom = bottom end
+                            local top = d.Position.Y + (d.Size.Y / 2)
+                            if top > highestTop then highestTop = top end
                         end
                     end
-                    if lowestBottom ~= mhuge then return lowestBottom end
+                    if highestTop ~= -mhuge then return highestTop end
                 end
             end
         end
-        return -2 -- Fallback gebaseerd op de eerdere logs
+        -- Fallback: slots staan op Y≈0.23, dus bovenkant vloer ≈ 0
+        return 0
     end
 
     -- ==========================================
@@ -69,7 +68,7 @@ function M.init(Modules)
     end
 
     -- ==========================================
-    -- VLOEREN VERBERGEN (Originele map weghalen)
+    -- VLOEREN VERBERGEN
     -- ==========================================
     local function godFindFloorParts()
         local floors, map = {}, nil
@@ -146,7 +145,6 @@ function M.init(Modules)
                 end)
                 local n = slower(c.Name)
                 if sfind(n,"kill") or sfind(n,"death") or sfind(n,"damage") then isKill = true end
-                
                 if isKill then
                     tinsert(MzD._godKillParts, {
                         part = c, canCollide = c.CanCollide, canTouch = c.CanTouch,
@@ -194,14 +192,15 @@ function M.init(Modules)
 
     -- ==========================================
     -- NANO VLOER BOUWEN
+    -- Bovenkant vloer = naturalY (bovenkant Floor1 = waar brainrots op staan)
     -- ==========================================
     local function godBuildEgaleVloer(map)
         for _, p in pairs(MzD._godCreatedParts or {}) do pcall(function() if p then p:Destroy() end end) end
         MzD._godCreatedParts = {}
-        
+
         local startX, endX = godDetectMapXRange(map)
-        local naturalY = getMapNaturalY()
-        
+        local naturalY = getMapNaturalY()  -- bovenkant Floor1
+
         local floorWidth = 420
         local floorThick = 4
         local theme = getThemeColors(MzD)
@@ -209,7 +208,7 @@ function M.init(Modules)
         local segLen = mabs(endX - startX)
         local centerX = (startX + endX) / 2
 
-        -- De vloer wordt gepositioneerd zodat de bóvenkant exact op naturalY ligt
+        -- Bovenkant van nanovloer = naturalY, center = naturalY - floorThick/2
         local floorCenterY = naturalY - (floorThick / 2)
 
         local floor = Instance.new("Part")
@@ -276,8 +275,9 @@ function M.init(Modules)
         catch.Parent = workspace
         tinsert(MzD._godCreatedParts, catch)
 
-        -- Bewaar de actuele loop-hoogte zodat teleport goed gaat
+        -- WalkY = bovenkant nanovloer + kleine offset zodat speler er netjes op staat
         MzD._actualGodWalkY = naturalY + 3
+        MzD.S.GodFloorY = naturalY  -- sync met settings
         return true
     end
 
@@ -289,10 +289,8 @@ function M.init(Modules)
         if not hrp then return end
         local hum = Player.Character:FindFirstChild("Humanoid")
         hrp.Velocity = Vector3.new(0,0,0)
-        
         local targetY = MzD._actualGodWalkY or MzD.S.GodWalkY
         hrp.CFrame = CFrame.new(hrp.Position.X, targetY, hrp.Position.Z)
-        
         if hum then
             pcall(function()
                 hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
@@ -313,6 +311,7 @@ function M.init(Modules)
                     local hrp = ch:FindFirstChild("HumanoidRootPart")
                     local hum = ch:FindFirstChild("Humanoid")
 
+                    -- Verberg originele vloeren periodiek
                     if tick() - MzD._godFloorCacheTime > 5 then
                         for _, data in pairs(MzD._godOriginalFloors or {}) do
                             if data.part and data.part.Parent then
@@ -339,10 +338,11 @@ function M.init(Modules)
                         end)
                     end
 
-                    local catchY = (MzD._actualGodWalkY or MzD.S.GodWalkY) - 30
+                    local walkY = MzD._actualGodWalkY or MzD.S.GodWalkY
+                    local catchY = walkY - 30
                     if hrp and hrp.Position.Y < catchY then
                         hrp.Velocity = Vector3.new(0,0,0)
-                        hrp.CFrame   = CFrame.new(hrp.Position.X, MzD._actualGodWalkY or MzD.S.GodWalkY, hrp.Position.Z)
+                        hrp.CFrame = CFrame.new(hrp.Position.X, walkY, hrp.Position.Z)
                     end
                 end)
                 twait(0.5)
@@ -379,11 +379,11 @@ function M.init(Modules)
             end)
         end)
     end
-    
-    M.godTeleportUnder = godTeleportUnder
+
+    M.godTeleportUnder  = godTeleportUnder
     M.godBuildEgaleVloer = godBuildEgaleVloer
     M.godDisableKillParts = godDisableKillParts
-    M.godSetupHealth = godSetupHealth
+    M.godSetupHealth    = godSetupHealth
 
     -- ==========================================
     -- ENABLE / DISABLE
@@ -411,7 +411,6 @@ function M.init(Modules)
         godRestoreFloors()
         for _, p in pairs(MzD._godCreatedParts or {}) do pcall(function() if p then p:Destroy() end end) end
         MzD._godCreatedParts = {}
-        
         local map = godHideOriginalFloors()
         twait(0.05)
         godBuildEgaleVloer(map)
@@ -429,7 +428,6 @@ function M.init(Modules)
         godRestoreKillParts()
         for _, p in pairs(MzD._godCreatedParts or {}) do pcall(function() if p then p:Destroy() end end) end
         MzD._godCreatedParts = {}
-        
         local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
         if hrp then hrp.Velocity = Vector3.new(0,0,0) hrp.CFrame = CFrame.new(hrp.Position.X, 10, hrp.Position.Z) end
         local ch = Player.Character
