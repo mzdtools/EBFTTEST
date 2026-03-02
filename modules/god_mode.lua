@@ -690,20 +690,33 @@ function M.init(Modules)
                     end
 
                     -- Actieve magneet: nieuwe brainrots op eigen base naar beneden
-                    -- Zoek base via GUID of via naam
+                    -- Zoek base: pak de base die al een delta heeft met de meeste nieuwe parts
                     if workspace:FindFirstChild("Bases") then
                         local myBase = nil
+                        -- Eerst via MzD.baseGUID
                         if MzD.baseGUID then
                             myBase = workspace.Bases:FindFirstChild(MzD.baseGUID)
                         end
-                        -- Fallback: zoek base op naam van de speler
-                        if not myBase then
-                            local pname = slower(Player.Name)
-                            for _, b in pairs(workspace.Bases:GetChildren()) do
-                                if sfind(slower(b.Name), pname) then
-                                    myBase = b break
+                        -- Fallback: pak de base met delta die de meeste onverplaatste parts heeft
+                        -- (dit is jouw eigen base want anderen zijn al volledig verplaatst)
+                        if not myBase and MzD._baseDeltas then
+                            local bestBase = nil
+                            local bestCount = 0
+                            for b, _ in pairs(MzD._baseDeltas) do
+                                if b and b.Parent then
+                                    local newCount = 0
+                                    for _, d in pairs(b:GetDescendants()) do
+                                        if d:IsA("BasePart") and not MzD._godMovedSet[d] then
+                                            newCount += 1
+                                        end
+                                    end
+                                    if newCount > bestCount then
+                                        bestCount = newCount
+                                        bestBase = b
+                                    end
                                 end
                             end
+                            if bestBase and bestCount > 0 then myBase = bestBase end
                         end
 
                         if myBase then
