@@ -1,8 +1,8 @@
 -- ============================================
--- [MODULE 10] GOD MODE - NANO EDITION (v32)
--- Fixes: Score Systeem 2.0 voor LimitedShop (negeert diepe palen).
--- Rig-Scanner voor Brainrots (verplaatst alleen de RootPart 
--- zodat de poppetjes niet in de lucht blijven zweven).
+-- [MODULE 10] GOD MODE - REVERSE EDITION (v33)
+-- Fixes: Geen modellen of brainrots meer verplaatsen! 
+-- Schuift de Nano-Vloer op de natuurlijke hoogte van de map. 
+-- 100% bug-vrij voor physics en NPC's.
 -- ============================================
 
 local M = {}
@@ -26,7 +26,50 @@ function M.init(Modules)
     local buildSurfaceGui = Modules.utility.buildSurfaceGui
 
     -- ==========================================
-    -- VLOER DETECTIE (Oude vloeren verbergen)
+    -- NATUURLIJKE HOOGTE BEPALEN
+    -- ==========================================
+    local function getMapNaturalY()
+        -- Zoek naar de onderkant van Floor1 van eender welke base (meest betrouwbare anker)
+        if workspace:FindFirstChild("Bases") then
+            for _, b in pairs(workspace.Bases:GetChildren()) do
+                local floor1 = b:FindFirstChild("Floor1")
+                if floor1 then
+                    local lowestBottom = mhuge
+                    for _, d in pairs(floor1:GetDescendants()) do
+                        if d:IsA("BasePart") and not isMzDPart(d) then
+                            local bottom = d.Position.Y - (d.Size.Y / 2)
+                            if bottom < lowestBottom then lowestBottom = bottom end
+                        end
+                    end
+                    if lowestBottom ~= mhuge then return lowestBottom end
+                end
+            end
+        end
+        return -2 -- Fallback gebaseerd op de eerdere logs
+    end
+
+    -- ==========================================
+    -- MAP X-RANGE BEPALEN
+    -- ==========================================
+    local function godDetectMapXRange(map)
+        local minX, maxX = -50, 4500
+        if map then
+            minX, maxX = mhuge, -mhuge
+            for _, d in pairs(map:GetDescendants()) do
+                if d:IsA("BasePart") and not isMzDPart(d) and d.Position.Y < 50 and d.Position.Y > -30 then
+                    local l = d.Position.X - d.Size.X/2
+                    local r = d.Position.X + d.Size.X/2
+                    if l < minX then minX = l end
+                    if r > maxX then maxX = r end
+                end
+            end
+            if maxX <= minX then minX, maxX = -50, 4500 end
+        end
+        return minX-20, maxX+20
+    end
+
+    -- ==========================================
+    -- VLOEREN VERBERGEN (Originele map weghalen)
     -- ==========================================
     local function godFindFloorParts()
         local floors, map = {}, nil
@@ -66,25 +109,32 @@ function M.init(Modules)
         return floors, map
     end
 
-    local function godDetectMapXRange(map)
-        local minX, maxX = -50, 4500
-        if map then
-            minX, maxX = mhuge, -mhuge
-            for _, d in pairs(map:GetDescendants()) do
-                if d:IsA("BasePart") and not isMzDPart(d) and d.Position.Y < 50 and d.Position.Y > -30 then
-                    local l = d.Position.X - d.Size.X/2
-                    local r = d.Position.X + d.Size.X/2
-                    if l < minX then minX = l end
-                    if r > maxX then maxX = r end
-                end
-            end
-            if maxX <= minX then minX, maxX = -50, 4500 end
+    local function godHideOriginalFloors()
+        local floors, map = godFindFloorParts()
+        MzD._godOriginalFloors = {}
+        for _, p in pairs(floors) do
+            tinsert(MzD._godOriginalFloors, {
+                part = p, canCollide = p.CanCollide, transparency = p.Transparency,
+            })
+            pcall(function() p.CanCollide = false p.Transparency = 1 end)
         end
-        return minX-20, maxX+20
+        return map
+    end
+
+    local function godRestoreFloors()
+        for _, data in pairs(MzD._godOriginalFloors or {}) do
+            pcall(function()
+                if data.part and data.part.Parent then
+                    data.part.CanCollide = data.canCollide
+                    data.part.Transparency = data.transparency
+                end
+            end)
+        end
+        MzD._godOriginalFloors = {}
     end
 
     -- ==========================================
-    -- KILL PARTS 
+    -- KILL PARTS UITSCHAKELEN
     -- ==========================================
     local function godDisableKillParts()
         MzD._godKillParts = {}
@@ -143,283 +193,106 @@ function M.init(Modules)
     end
 
     -- ==========================================
-    -- VLOER BOUWEN 
+    -- NANO VLOER BOUWEN
     -- ==========================================
     local function godBuildEgaleVloer(map)
         for _, p in pairs(MzD._godCreatedParts or {}) do pcall(function() if p then p:Destroy() end end) end
         MzD._godCreatedParts = {}
         
         local startX, endX = godDetectMapXRange(map)
-        local floorY = MzD.S.GodFloorY
+        local naturalY = getMapNaturalY()
+        
+        local floorWidth = 420
+        local floorThick = 4
         local theme = getThemeColors(MzD)
+
+        local segLen = mabs(endX - startX)
+        local centerX = (startX + endX) / 2
+
+        -- De vloer wordt gepositioneerd zodat de bóvenkant exact op naturalY ligt
+        local floorCenterY = naturalY - (floorThick / 2)
 
         local floor = Instance.new("Part")
         floor.Name = "MzDNanoFloor"
-        floor.Size = Vector3.new(mabs(endX - startX), 4, 420)
-        floor.Position = Vector3.new((startX+endX)/2, floorY, 0)
+        floor.Size = Vector3.new(segLen, floorThick, floorWidth)
+        floor.Position = Vector3.new(centerX, floorCenterY, 0)
         floor.Anchored = true floor.CanCollide = true
         floor.Color = Color3.fromRGB(15, 15, 15)
         floor.Material = Enum.Material.Glass
         floor.Transparency = 0.1
+        floor.Reflectance = 0.3
         floor.Parent = workspace
         tinsert(MzD._godCreatedParts, floor)
 
+        local light = Instance.new("SurfaceLight")
+        light.Color = theme.stripe
+        light.Brightness = 2
+        light.Range = 20
+        light.Face = Enum.NormalId.Top
+        light.Angle = 180
+        light.Parent = floor
+
         buildSurfaceGui(floor, Enum.NormalId.Top, theme)
+
+        local topY = floorCenterY + floorThick/2 + 0.1
+        for _, zPos in pairs({floorWidth/2-5, -floorWidth/2+5}) do
+            local s = Instance.new("Part")
+            s.Name = "MzDGodFloorStripe" s.Size = Vector3.new(segLen, 0.2, 2)
+            s.Position = Vector3.new(centerX, topY, zPos)
+            s.Anchored = true s.CanCollide = false
+            s.Color = theme.stripe s.Material = Enum.Material.Neon
+            s.Parent = workspace
+            tinsert(MzD._godCreatedParts, s)
+        end
+        local sm = Instance.new("Part")
+        sm.Name = "MzDGodFloorStripe" sm.Size = Vector3.new(segLen, 0.2, 1)
+        sm.Position = Vector3.new(centerX, topY, 0)
+        sm.Anchored = true sm.CanCollide = false
+        sm.Color = theme.stripe sm.Material = Enum.Material.Neon
+        sm.Parent = workspace
+        tinsert(MzD._godCreatedParts, sm)
+
+        local wallHeight = 50
+        local wallThickness = 2
+        local wallY = floorCenterY + (floorThick / 2) + (wallHeight / 2)
+        for _, zOffset in pairs({floorWidth/2 + wallThickness/2, -floorWidth/2 - wallThickness/2}) do
+            local wall = Instance.new("Part")
+            wall.Name = "MzDGodNanoWall"
+            wall.Size = Vector3.new(segLen, wallHeight, wallThickness)
+            wall.Position = Vector3.new(centerX, wallY, zOffset)
+            wall.Anchored = true wall.CanCollide = true
+            wall.Material = Enum.Material.ForceField
+            wall.Transparency = 0.7
+            wall.Color = theme.stripe
+            wall.Parent = workspace
+            tinsert(MzD._godCreatedParts, wall)
+        end
+
+        local catch = Instance.new("Part")
+        catch.Name = "MzDGodCatchFloor"
+        catch.Size = Vector3.new(segLen + 200, 2, floorWidth + 100)
+        catch.Position = Vector3.new(centerX, floorCenterY - 15, 0)
+        catch.Anchored = true catch.CanCollide = true catch.Transparency = 1
+        catch.Parent = workspace
+        tinsert(MzD._godCreatedParts, catch)
+
+        -- Bewaar de actuele loop-hoogte zodat teleport goed gaat
+        MzD._actualGodWalkY = naturalY + 3
         return true
     end
 
-    local function godHideOriginalFloors()
-        local floors, map = godFindFloorParts()
-        MzD._godOriginalFloors = {}
-        for _, p in pairs(floors) do
-            tinsert(MzD._godOriginalFloors, {
-                part = p, canCollide = p.CanCollide, transparency = p.Transparency,
-            })
-            pcall(function() p.CanCollide = false p.Transparency = 1 end)
-        end
-        return map
-    end
-
-    local function godRestoreFloors()
-        for _, data in pairs(MzD._godOriginalFloors or {}) do
-            pcall(function()
-                if data.part and data.part.Parent then
-                    data.part.CanCollide = data.canCollide
-                    data.part.Transparency = data.transparency
-                end
-            end)
-        end
-        MzD._godOriginalFloors = {}
-    end
-
     -- ==========================================
-    -- STRUCTUREN VERLAGEN (Score Systeem 2.0 + Rig Fix)
-    -- ==========================================
-    
-    -- Score systeem dat zoekt naar echte grote platte delen (negeert palen en daken)
-    local function getModelTrueBottom(model)
-        local bestPart = nil
-        local highestScore = -mhuge
-        local fallbackLowest = mhuge
-
-        for _, d in pairs(model:GetDescendants()) do
-            if d:IsA("BasePart") and not isMzDPart(d) then
-                local n = slower(d.Name)
-                local bottom = d.Position.Y - (d.Size.Y / 2)
-                
-                if sfind(n, "radius") or sfind(n, "roof") or sfind(n, "ceiling") or sfind(n, "sky") then continue end
-                if d.Position.Y > 200 then continue end
-                
-                if bottom < fallbackLowest then fallbackLowest = bottom end
-                
-                local area = d.Size.X * d.Size.Z
-                -- Moet plat zijn en redelijk oppervlak hebben
-                if d.Size.Y < 10 and area > 10 then
-                    local score = area
-                    if sfind(n, "floor") or sfind(n, "ground") or sfind(n, "base") or sfind(n, "pad") then
-                        score = score + 10000
-                    end
-                    -- Strafpunten voor hoogte (laagste vloeren krijgen voorrang)
-                    score = score - (d.Position.Y * 10)
-                    
-                    if score > highestScore then
-                        highestScore = score
-                        bestPart = d
-                    end
-                end
-            end
-        end
-        
-        if bestPart then
-            return bestPart.Position.Y - (bestPart.Size.Y / 2)
-        end
-        return fallbackLowest
-    end
-
-    -- Vind de begane grond van een base (exact via Floor1 of Slots)
-    local function getBaseFloorBottom(base)
-        local floor1 = base:FindFirstChild("Floor1")
-        if floor1 then
-            local lowestBottom = mhuge
-            for _, d in pairs(floor1:GetDescendants()) do
-                if d:IsA("BasePart") and not isMzDPart(d) then
-                    local bottom = d.Position.Y - d.Size.Y / 2
-                    if bottom < lowestBottom then lowestBottom = bottom end
-                end
-            end
-            if lowestBottom ~= mhuge then return lowestBottom end
-        end
-
-        local slots = base:FindFirstChild("Slots")
-        if slots then
-            local lowestY = mhuge
-            for _, s in pairs(slots:GetChildren()) do
-                local pp = s.PrimaryPart or s:FindFirstChildWhichIsA("BasePart")
-                if pp and pp.Position.Y < lowestY then lowestY = pp.Position.Y end
-            end
-            if lowestY ~= mhuge then return lowestY - 2 end
-        end
-        return getModelTrueBottom(base)
-    end
-
-    -- Safely move descendants. If it's a rigged NPC (brainrot), only move HumanoidRootPart!
-    local function moveDescendantsSafely(parentObj, deltaY)
-        local skipSet = {}
-        for _, d in pairs(parentObj:GetDescendants()) do
-            if skipSet[d] then continue end
-            
-            -- RIG FIX: Als het een geanimeerd model is, verplaats alléén de HumanoidRootPart
-            if d:IsA("Model") and d:FindFirstChild("Humanoid") and d:FindFirstChild("HumanoidRootPart") then
-                local hrp = d.HumanoidRootPart
-                if not MzD._godMovedSet[hrp] then
-                    tinsert(MzD._godMovedParts, {part = hrp, origCF = hrp.CFrame})
-                    MzD._godMovedSet[hrp] = true
-                    pcall(function() hrp.CFrame = hrp.CFrame + Vector3.new(0, deltaY, 0) end)
-                end
-                -- Negeer de rest van het lichaam zodat hij niet in de lucht uit elkaar getrokken wordt
-                for _, sub in pairs(d:GetDescendants()) do
-                    if sub:IsA("BasePart") then MzD._godMovedSet[sub] = true end
-                    skipSet[sub] = true
-                end
-                continue
-            end
-            
-            -- Normale (statische) parts
-            if d:IsA("BasePart") and not isMzDPart(d) and not MzD._godMovedSet[d] then
-                tinsert(MzD._godMovedParts, {part = d, origCF = d.CFrame})
-                MzD._godMovedSet[d] = true
-                pcall(function() d.CFrame = d.CFrame + Vector3.new(0, deltaY, 0) end)
-            end
-        end
-    end
-
-    local function godMoveModel(obj, deltaY, isBase)
-        if isBase and MzD._baseDeltas then
-            MzD._baseDeltas[obj] = deltaY
-        end
-        moveDescendantsSafely(obj, deltaY)
-    end
-
-    local function godLowerStructures()
-        MzD._godMovedParts = {}
-        MzD._godMovedSet = {}
-        MzD._baseDeltas = {}
-
-        local floorTop = MzD.S.GodFloorY + 2 
-
-        -- 1. ALLE BASES
-        if workspace:FindFirstChild("Bases") then
-            for _, base in pairs(workspace.Bases:GetChildren()) do
-                local trueBottom = getBaseFloorBottom(base)
-                if trueBottom ~= mhuge then
-                    local deltaY = floorTop - trueBottom
-                    if mabs(deltaY) < 500 then
-                        godMoveModel(base, deltaY, true)
-                    end
-                end
-            end
-        end
-
-        -- 2. WORKSPACE DIRECTE OBJECTEN
-        local function tryMoveWorkspaceObj(name)
-            local obj = workspace:FindFirstChild(name)
-            if not obj then return end
-            local trueBottom = getModelTrueBottom(obj)
-            if trueBottom == mhuge then return end
-            local deltaY = floorTop - trueBottom
-            if mabs(deltaY) < 500 then
-                godMoveModel(obj, deltaY, false)
-            end
-        end
-
-        tryMoveWorkspaceObj("DoomWheel")
-        tryMoveWorkspaceObj("LimitedShop")
-        tryMoveWorkspaceObj("FireAndIceWheel")
-        tryMoveWorkspaceObj("DivineLuckyBlockPad")
-        tryMoveWorkspaceObj("MysteryMerchant")
-
-        for _, c in pairs(workspace:GetChildren()) do
-            if c:IsA("Model") and c.Name == "Model" then
-                local isMerchant = false
-                for _, d in pairs(c:GetDescendants()) do
-                    if sfind(slower(d.Name), "merchant") or sfind(slower(d.Name), "mystery") then
-                        isMerchant = true break
-                    end
-                end
-                if isMerchant then
-                    local trueBottom = getModelTrueBottom(c)
-                    if trueBottom ~= mhuge then
-                        local deltaY = floorTop - trueBottom
-                        if mabs(deltaY) < 500 then godMoveModel(c, deltaY, false) end
-                    end
-                end
-            end
-        end
-
-        -- 3. GAME OBJECTS
-        local go = workspace:FindFirstChild("GameObjects")
-        if go then
-            local ps = go:FindFirstChild("PlaceSpecific", true)
-            if ps then
-                local root = ps:FindFirstChild("root")
-                if root then
-                    local trueBottomTargets = {"MysteryMerchant", "SiteEventDetails", "PlazaPortal", "SellStand", "UpgradeShop"}
-                    for _, name in pairs(trueBottomTargets) do
-                        local obj = root:FindFirstChild(name)
-                        if obj then
-                            local trueBottom = getModelTrueBottom(obj)
-                            if trueBottom ~= mhuge then
-                                local deltaY = floorTop - trueBottom
-                                if mabs(deltaY) < 500 then godMoveModel(obj, deltaY, false) end
-                            end
-                        end
-                    end
-                    
-                    local sm = root:FindFirstChild("SpawnMachines")
-                    if sm then
-                        for _, machine in pairs(sm:GetChildren()) do
-                            local trueBottom = getModelTrueBottom(machine)
-                            if trueBottom ~= mhuge then
-                                local deltaY = floorTop - trueBottom
-                                if mabs(deltaY) < 500 then godMoveModel(machine, deltaY, false) end
-                            end
-                        end
-                    end
-
-                    local tower = root:FindFirstChild("Tower")
-                    if tower then
-                        local main = tower:FindFirstChild("Main")
-                        if main then
-                            local trueBottom = getModelTrueBottom(main)
-                            if trueBottom ~= mhuge then
-                                local deltaY = floorTop - trueBottom
-                                if mabs(deltaY) < 500 then godMoveModel(main, deltaY, false) end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    local function godRestoreStructures()
-        for _, data in pairs(MzD._godMovedParts or {}) do
-            pcall(function() if data.part and data.part.Parent then data.part.CFrame = data.origCF end end)
-        end
-        MzD._godMovedParts = {}
-        MzD._godMovedSet = {}
-        MzD._baseDeltas = {}
-    end
-
-    -- ==========================================
-    -- TELEPORT
+    -- TELEPORT EN LOOPS
     -- ==========================================
     local function godTeleportUnder()
         local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
         local hum = Player.Character:FindFirstChild("Humanoid")
         hrp.Velocity = Vector3.new(0,0,0)
-        hrp.CFrame   = CFrame.new(hrp.Position.X, MzD.S.GodWalkY, hrp.Position.Z)
+        
+        local targetY = MzD._actualGodWalkY or MzD.S.GodWalkY
+        hrp.CFrame = CFrame.new(hrp.Position.X, targetY, hrp.Position.Z)
+        
         if hum then
             pcall(function()
                 hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
@@ -431,14 +304,6 @@ function M.init(Modules)
         end
     end
 
-    M.godTeleportUnder = godTeleportUnder
-    M.godBuildEgaleVloer = godBuildEgaleVloer
-    M.godDisableKillParts = godDisableKillParts
-    M.reapplyGodFloor = function() MzD.reapplyGodFloor() end
-
-    -- ==========================================
-    -- GOD LOOP (Onbreekbare Magneet)
-    -- ==========================================
     local function godStartLoop()
         if MzD._godLoopThread then pcall(tcancel, MzD._godLoopThread) end
         MzD._godLoopThread = tspawn(function()
@@ -458,38 +323,6 @@ function M.init(Modules)
                         MzD._godFloorCacheTime = tick()
                     end
 
-                    -- Magneet: Verplaats nieuwe brainrots veilig (zonder ze te breken)
-                    if workspace:FindFirstChild("Bases") then
-                        local myBase = nil
-                        if MzD.baseGUID then
-                            myBase = workspace.Bases:FindFirstChild(MzD.baseGUID)
-                        end
-                        
-                        -- Fallback als MzD.baseGUID om een of andere reden niet werkt
-                        if not myBase and MzD._baseDeltas then
-                            local bestBase, bestCount = nil, 0
-                            for b, _ in pairs(MzD._baseDeltas) do
-                                if b and b.Parent then
-                                    local newCount = 0
-                                    for _, d in pairs(b:GetDescendants()) do
-                                        if d:IsA("BasePart") and not MzD._godMovedSet[d] then
-                                            newCount += 1
-                                        end
-                                    end
-                                    if newCount > bestCount then bestCount = newCount bestBase = b end
-                                end
-                            end
-                            if bestBase and bestCount > 0 then myBase = bestBase end
-                        end
-
-                        if myBase then
-                            local delta = MzD._baseDeltas and MzD._baseDeltas[myBase]
-                            if delta then
-                                moveDescendantsSafely(myBase, delta)
-                            end
-                        end
-                    end
-
                     if hum then
                         pcall(function()
                             hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
@@ -506,9 +339,10 @@ function M.init(Modules)
                         end)
                     end
 
-                    if hrp and hrp.Position.Y < MzD.S.GodWalkY - 30 then
+                    local catchY = (MzD._actualGodWalkY or MzD.S.GodWalkY) - 30
+                    if hrp and hrp.Position.Y < catchY then
                         hrp.Velocity = Vector3.new(0,0,0)
-                        hrp.CFrame   = CFrame.new(hrp.Position.X, MzD.S.GodWalkY, hrp.Position.Z)
+                        hrp.CFrame   = CFrame.new(hrp.Position.X, MzD._actualGodWalkY or MzD.S.GodWalkY, hrp.Position.Z)
                     end
                 end)
                 twait(0.5)
@@ -516,9 +350,6 @@ function M.init(Modules)
         end)
     end
 
-    -- ==========================================
-    -- HEALTH SETUP 
-    -- ==========================================
     local function godSetupHealth(char)
         if MzD._godHealthConn then pcall(function() MzD._godHealthConn:Disconnect() end) end
         if MzD._godDiedConn   then pcall(function() MzD._godDiedConn:Disconnect() end) end
@@ -548,6 +379,10 @@ function M.init(Modules)
             end)
         end)
     end
+    
+    M.godTeleportUnder = godTeleportUnder
+    M.godBuildEgaleVloer = godBuildEgaleVloer
+    M.godDisableKillParts = godDisableKillParts
     M.godSetupHealth = godSetupHealth
 
     -- ==========================================
@@ -561,8 +396,6 @@ function M.init(Modules)
         twait(0.1)
         local map = godHideOriginalFloors()
         twait(0.1)
-        godLowerStructures()
-        twait(0.1)
         godBuildEgaleVloer(map)
         twait(0.2)
         godStartLoop()
@@ -570,24 +403,20 @@ function M.init(Modules)
         godTeleportUnder()
         twait(0.1)
         if Player.Character then godSetupHealth(Player.Character) end
-        MzD.Status.god = "Aan (Y="..MzD.S.GodWalkY.." K:"..killCount.." NanoVloer)"
+        MzD.Status.god = "Aan (Reverse Mode K:"..killCount..")"
     end
 
     function MzD.reapplyGodFloor()
         if not MzD._isGod then return end
-        godRestoreStructures()
         godRestoreFloors()
         for _, p in pairs(MzD._godCreatedParts or {}) do pcall(function() if p then p:Destroy() end end) end
         MzD._godCreatedParts = {}
         
         local map = godHideOriginalFloors()
         twait(0.05)
-        godLowerStructures()
-        twait(0.05)
         godBuildEgaleVloer(map)
         twait(0.05)
         godTeleportUnder()
-        MzD.Status.god = "Aan (Y="..MzD.S.GodWalkY.." NanoVloer)"
     end
 
     function MzD.disableGod()
@@ -597,8 +426,10 @@ function M.init(Modules)
         if MzD._godHealthConn      then pcall(function() MzD._godHealthConn:Disconnect() end) MzD._godHealthConn = nil end
         if MzD._godDiedConn        then pcall(function() MzD._godDiedConn:Disconnect()   end) MzD._godDiedConn = nil end
         godRestoreFloors()
-        godRestoreStructures()
         godRestoreKillParts()
+        for _, p in pairs(MzD._godCreatedParts or {}) do pcall(function() if p then p:Destroy() end end) end
+        MzD._godCreatedParts = {}
+        
         local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
         if hrp then hrp.Velocity = Vector3.new(0,0,0) hrp.CFrame = CFrame.new(hrp.Position.X, 10, hrp.Position.Z) end
         local ch = Player.Character
