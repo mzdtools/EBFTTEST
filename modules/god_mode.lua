@@ -1,7 +1,7 @@
 -- ============================================
--- [MODULE 10] GOD MODE - NANO EDITION (v29 FIXED)
--- Fixes: Vloer werkt weer + Score-systeem voor bodems +
--- Actieve magneet voor nieuwe brainrots op eigen base.
+-- [MODULE 10] GOD MODE - NANO EDITION (v31)
+-- Fixes: Definitieve bodemdetectie via Floor1,
+-- Dak-uitsluiting, en een onbreekbare Base-magneet loop!
 -- ============================================
 
 local M = {}
@@ -25,7 +25,7 @@ function M.init(Modules)
     local buildSurfaceGui = Modules.utility.buildSurfaceGui
 
     -- ==========================================
-    -- VLOER DETECTIE (uit v28, was werkend)
+    -- VLOER DETECTIE 
     -- ==========================================
     local function godFindFloorParts()
         local floors, map = {}, nil
@@ -162,7 +162,7 @@ function M.init(Modules)
     end
 
     -- ==========================================
-    -- KILL PARTS (uit v28, volledig)
+    -- KILL PARTS 
     -- ==========================================
     local function godFindAllKillParts()
         local kills, seen = {}, {}
@@ -268,7 +268,7 @@ function M.init(Modules)
     end
 
     -- ==========================================
-    -- VLOER BOUWEN (uit v28, was werkend)
+    -- VLOER BOUWEN 
     -- ==========================================
     local function godBuildEgaleVloer(map)
         for _, p in pairs(MzD._godCreatedParts or {}) do
@@ -361,7 +361,7 @@ function M.init(Modules)
     end
 
     -- ==========================================
-    -- FLOOR HIDE/RESTORE (uit v28)
+    -- FLOOR HIDE/RESTORE
     -- ==========================================
     local function godHideOriginalFloors()
         local floors, map = godFindFloorParts()
@@ -411,21 +411,21 @@ function M.init(Modules)
     end
 
     -- ==========================================
-    -- STRUCTUREN VERLAGEN (v30: fixes voor eigen base, zwevers, doorzakkers)
+    -- STRUCTUREN VERLAGEN (v31)
     -- ==========================================
 
-    -- Vind de echte onderkant van een model, skip radius/dak/paal/antenne parts
+    -- Vind de echte onderkant van een model (vermijd daken/plafonds/vlaggenmasten)
     local function getModelTrueBottom(model)
         local lowestBottom = mhuge
         for _, d in pairs(model:GetDescendants()) do
             if d:IsA("BasePart") and not isMzDPart(d) then
                 local n = slower(d.Name)
-                if n == "radius" then continue end
-                if n == "roof" then continue end
-                if n == "ceiling" then continue end
+                if sfind(n, "radius") or sfind(n, "roof") or sfind(n, "ceiling") or sfind(n, "sky") then continue end
                 if d.Position.Y > 200 then continue end
+                
                 local maxXZ = d.Size.X > d.Size.Z and d.Size.X or d.Size.Z
                 if d.Size.Y > 10 and d.Size.Y > maxXZ * 2 then continue end
+                
                 local bottom = d.Position.Y - (d.Size.Y / 2)
                 if bottom < lowestBottom then lowestBottom = bottom end
             end
@@ -433,10 +433,8 @@ function M.init(Modules)
         return lowestBottom
     end
 
-    -- Vind de vloer van een base via Floor1 folder (laagste bottom)
-    -- Floor1 = begane grond waar slot 1-10 brainrots op staan
+    -- Vind de begane grond van een base via Floor1 folder
     local function getBaseFloorBottom(base)
-        -- Stap 1: zoek Floor1 folder direct
         local floor1 = base:FindFirstChild("Floor1")
         if floor1 then
             local lowestBottom = mhuge
@@ -449,7 +447,6 @@ function M.init(Modules)
             if lowestBottom ~= mhuge then return lowestBottom end
         end
 
-        -- Stap 2: geen Floor1 → pak laagste part van de Slots folder
         local slots = base:FindFirstChild("Slots")
         if slots then
             local lowestY = mhuge
@@ -457,11 +454,9 @@ function M.init(Modules)
                 local pp = s.PrimaryPart or s:FindFirstChildWhichIsA("BasePart")
                 if pp and pp.Position.Y < lowestY then lowestY = pp.Position.Y end
             end
-            -- Slots staan OP de vloer, vloer bottom ≈ slot Y - ~2
             if lowestY ~= mhuge then return lowestY - 2 end
         end
 
-        -- Stap 3: fallback op getModelTrueBottom
         return getModelTrueBottom(base)
     end
 
@@ -469,27 +464,12 @@ function M.init(Modules)
         if isBase and MzD._baseDeltas then
             MzD._baseDeltas[obj] = deltaY
         end
-        -- Verplaats alle descendants (inclusief Slots, Floor1-4, slot brainrots etc.)
+        -- GetDescendants pakt automatisch ALLES in het object (children, slot brainrots, etc.)
         for _, d in pairs(obj:GetDescendants()) do
-            if d:IsA("BasePart") and not isMzDPart(d) then
+            if d:IsA("BasePart") and not isMzDPart(d) and not MzD._godMovedSet[d] then
                 tinsert(MzD._godMovedParts, {part = d, origCF = d.CFrame})
                 MzD._godMovedSet[d] = true
                 pcall(function() d.CFrame = d.CFrame + Vector3.new(0, deltaY, 0) end)
-            end
-        end
-        -- Ook directe Model children verplaatsen (bv. "slot 1 brainrot" direct in base)
-        for _, child in pairs(obj:GetChildren()) do
-            if child:IsA("Model") and not isMzDPart(child) then
-                local n = slower(child.Name)
-                if sfind(n, "slot") or sfind(n, "brainrot") or sfind(n, "pet") then
-                    for _, d in pairs(child:GetDescendants()) do
-                        if d:IsA("BasePart") and not isMzDPart(d) and not MzD._godMovedSet[d] then
-                            tinsert(MzD._godMovedParts, {part = d, origCF = d.CFrame})
-                            MzD._godMovedSet[d] = true
-                            pcall(function() d.CFrame = d.CFrame + Vector3.new(0, deltaY, 0) end)
-                        end
-                    end
-                end
             end
         end
     end
@@ -499,15 +479,14 @@ function M.init(Modules)
         MzD._godMovedSet = {}
         MzD._baseDeltas = {}
 
-        local floorTop = MzD.S.GodFloorY + 2  -- bovenkant van onze vloer (4 dik, center = GodFloorY)
+        local floorTop = MzD.S.GodFloorY + 2 
 
-        -- ===== 1. ALLE BASES (absolute laagste punt) =====
+        -- 1. ALLE BASES
         if workspace:FindFirstChild("Bases") then
             for _, base in pairs(workspace.Bases:GetChildren()) do
                 local trueBottom = getBaseFloorBottom(base)
                 if trueBottom ~= mhuge then
                     local deltaY = floorTop - trueBottom
-                    -- Clamp: niet meer dan 500 stuks verplaatsen (voorkomt gekke waarden)
                     if mabs(deltaY) < 500 then
                         godMoveModel(base, deltaY, true)
                     end
@@ -515,7 +494,7 @@ function M.init(Modules)
             end
         end
 
-        -- ===== 2. WORKSPACE DIRECTE OBJECTEN =====
+        -- 2. WORKSPACE DIRECTE OBJECTEN
         local function tryMoveWorkspaceObj(name)
             local obj = workspace:FindFirstChild(name)
             if not obj then return end
@@ -533,11 +512,8 @@ function M.init(Modules)
         tryMoveWorkspaceObj("DivineLuckyBlockPad")
         tryMoveWorkspaceObj("MysteryMerchant")
 
-        -- Mystery Merchant kan ook als naamloos "Model" in workspace zitten
-        -- Zoek via descendants naar een part genaamd "MysteryMerchant" of via label
         for _, c in pairs(workspace:GetChildren()) do
             if c:IsA("Model") and c.Name == "Model" then
-                -- Check of het een merchant is via children namen
                 local isMerchant = false
                 for _, d in pairs(c:GetDescendants()) do
                     local dn = slower(d.Name)
@@ -549,24 +525,21 @@ function M.init(Modules)
                     local trueBottom = getModelTrueBottom(c)
                     if trueBottom ~= mhuge then
                         local deltaY = floorTop - trueBottom
-                        if mabs(deltaY) < 500 then
-                            godMoveModel(c, deltaY, false)
-                        end
+                        if mabs(deltaY) < 500 then godMoveModel(c, deltaY, false) end
                     end
                 end
             end
         end
 
-        -- ===== 3. GAME OBJECTS (Shops, Portals, Machines) =====
+        -- 3. GAME OBJECTS
         local go = workspace:FindFirstChild("GameObjects")
         if go then
             local ps = go:FindFirstChild("PlaceSpecific", true)
             if ps then
                 local root = ps:FindFirstChild("root")
                 if root then
-                    -- Objecten die op de absolute bodem moeten landen
                     local trueBottomTargets = {
-                        "MysteryMerchant", "SiteEventDetails", "PlazaPortal", "SellStand",
+                        "MysteryMerchant", "SiteEventDetails", "PlazaPortal", "SellStand", "UpgradeShop"
                     }
                     for _, name in pairs(trueBottomTargets) do
                         local obj = root:FindFirstChild(name)
@@ -574,40 +547,22 @@ function M.init(Modules)
                             local trueBottom = getModelTrueBottom(obj)
                             if trueBottom ~= mhuge then
                                 local deltaY = floorTop - trueBottom
-                                if mabs(deltaY) < 500 then
-                                    godMoveModel(obj, deltaY, false)
-                                end
+                                if mabs(deltaY) < 500 then godMoveModel(obj, deltaY, false) end
                             end
                         end
                     end
                     
-                    -- UpgradeShop: normale plaatsing op vloer
-                    local upgradeShop = root:FindFirstChild("UpgradeShop")
-                    if upgradeShop then
-                        local trueBottom = getModelTrueBottom(upgradeShop)
-                        if trueBottom ~= mhuge then
-                            local deltaY = floorTop - trueBottom
-                            if mabs(deltaY) < 500 then
-                                godMoveModel(upgradeShop, deltaY, false)
-                            end
-                        end
-                    end
-
-                    -- SpawnMachines (Sell machine, Wave machine, Spin wheel etc.)
                     local sm = root:FindFirstChild("SpawnMachines")
                     if sm then
                         for _, machine in pairs(sm:GetChildren()) do
                             local trueBottom = getModelTrueBottom(machine)
                             if trueBottom ~= mhuge then
                                 local deltaY = floorTop - trueBottom
-                                if mabs(deltaY) < 500 then
-                                    godMoveModel(machine, deltaY, false)
-                                end
+                                if mabs(deltaY) < 500 then godMoveModel(machine, deltaY, false) end
                             end
                         end
                     end
 
-                    -- Tower main
                     local tower = root:FindFirstChild("Tower")
                     if tower then
                         local main = tower:FindFirstChild("Main")
@@ -615,9 +570,7 @@ function M.init(Modules)
                             local trueBottom = getModelTrueBottom(main)
                             if trueBottom ~= mhuge then
                                 local deltaY = floorTop - trueBottom
-                                if mabs(deltaY) < 500 then
-                                    godMoveModel(main, deltaY, false)
-                                end
+                                if mabs(deltaY) < 500 then godMoveModel(main, deltaY, false) end
                             end
                         end
                     end
@@ -667,7 +620,7 @@ function M.init(Modules)
     M.reapplyGodFloor = function() MzD.reapplyGodFloor() end
 
     -- ==========================================
-    -- GOD LOOP (uit v28 + magneet van v29)
+    -- GOD LOOP (Onbreekbare Magneet)
     -- ==========================================
     local function godStartLoop()
         if MzD._godLoopThread then pcall(tcancel, MzD._godLoopThread) end
@@ -678,7 +631,6 @@ function M.init(Modules)
                     local hrp = ch:FindFirstChild("HumanoidRootPart")
                     local hum = ch:FindFirstChild("Humanoid")
 
-                    -- Vloer blijven verbergen (resync elke 5 sec)
                     if tick() - MzD._godFloorCacheTime > 5 then
                         for _, data in pairs(MzD._godOriginalFloors or {}) do
                             if data.part and data.part.Parent then
@@ -689,19 +641,16 @@ function M.init(Modules)
                         MzD._godFloorCacheTime = tick()
                     end
 
-                    -- Actieve magneet: nieuwe brainrots op eigen base naar beneden
-                    -- Zoek base: pak de base die al een delta heeft met de meeste nieuwe parts
+                    -- Magneet: Nieuwe brainrots fixen
                     if workspace:FindFirstChild("Bases") then
                         local myBase = nil
-                        -- Eerst via MzD.baseGUID
                         if MzD.baseGUID then
                             myBase = workspace.Bases:FindFirstChild(MzD.baseGUID)
                         end
-                        -- Fallback: pak de base met delta die de meeste onverplaatste parts heeft
-                        -- (dit is jouw eigen base want anderen zijn al volledig verplaatst)
+                        
+                        -- Fallback: base met meeste onverplaatste parts is 100% zeker jouw basis
                         if not myBase and MzD._baseDeltas then
-                            local bestBase = nil
-                            local bestCount = 0
+                            local bestBase, bestCount = nil, 0
                             for b, _ in pairs(MzD._baseDeltas) do
                                 if b and b.Parent then
                                     local newCount = 0
@@ -710,39 +659,31 @@ function M.init(Modules)
                                             newCount += 1
                                         end
                                     end
-                                    if newCount > bestCount then
-                                        bestCount = newCount
-                                        bestBase = b
-                                    end
+                                    if newCount > bestCount then bestCount = newCount bestBase = b end
                                 end
                             end
                             if bestBase and bestCount > 0 then myBase = bestBase end
                         end
 
                         if myBase then
-                            -- Als deze base nog geen delta heeft, bereken die nu
-                            if not (MzD._baseDeltas and MzD._baseDeltas[myBase]) then
-                                if MzD._baseDeltas then
-                                    local floorTop = MzD.S.GodFloorY + 2
-                                    -- Gebruik absolute laagste punt (zelfde als godLowerStructures)
-                                    local trueBottom = getBaseFloorBottom(myBase)
-                                    if trueBottom ~= mhuge then
-                                        local delta = floorTop - trueBottom
-                                        if mabs(delta) < 500 then
-                                            MzD._baseDeltas[myBase] = delta
-                                            for _, d in pairs(myBase:GetDescendants()) do
-                                                if d:IsA("BasePart") and not isMzDPart(d) and not MzD._godMovedSet[d] then
-                                                    tinsert(MzD._godMovedParts, {part = d, origCF = d.CFrame})
-                                                    MzD._godMovedSet[d] = true
-                                                    pcall(function() d.CFrame = d.CFrame + Vector3.new(0, delta, 0) end)
-                                                end
-                                            end
-                                        end
+                            local delta = MzD._baseDeltas and MzD._baseDeltas[myBase]
+                            
+                            -- Als we hem via fallback hebben maar de delta ontbreekt (uitzondering)
+                            if not delta then
+                                local floorTop = MzD.S.GodFloorY + 2
+                                local trueBottom = getBaseFloorBottom(myBase)
+                                if trueBottom ~= mhuge then
+                                    delta = floorTop - trueBottom
+                                    if mabs(delta) < 500 then
+                                        MzD._baseDeltas = MzD._baseDeltas or {}
+                                        MzD._baseDeltas[myBase] = delta
+                                    else
+                                        delta = nil
                                     end
                                 end
-                            else
-                                -- Delta is al bekend, alleen nieuwe parts verplaatsen
-                                local delta = MzD._baseDeltas[myBase]
+                            end
+
+                            if delta then
                                 for _, d in pairs(myBase:GetDescendants()) do
                                     if d:IsA("BasePart") and not isMzDPart(d) and not MzD._godMovedSet[d] then
                                         tinsert(MzD._godMovedParts, {part = d, origCF = d.CFrame})
@@ -754,7 +695,6 @@ function M.init(Modules)
                         end
                     end
 
-                    -- Humanoid states fix
                     if hum then
                         pcall(function()
                             hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
@@ -771,7 +711,6 @@ function M.init(Modules)
                         end)
                     end
 
-                    -- Val-catch
                     if hrp and hrp.Position.Y < MzD.S.GodWalkY - 30 then
                         hrp.Velocity = Vector3.new(0,0,0)
                         hrp.CFrame   = CFrame.new(hrp.Position.X, MzD.S.GodWalkY, hrp.Position.Z)
@@ -783,7 +722,7 @@ function M.init(Modules)
     end
 
     -- ==========================================
-    -- HEALTH SETUP (uit v28)
+    -- HEALTH SETUP 
     -- ==========================================
     local function godSetupHealth(char)
         if MzD._godHealthConn then pcall(function() MzD._godHealthConn:Disconnect() end) end
@@ -839,19 +778,15 @@ function M.init(Modules)
         MzD.Status.god = "Aan (Y="..MzD.S.GodWalkY.." K:"..killCount.." NanoVloer)"
     end
 
-    -- Herbereken alles als GodFloorY verandert via dropdown (dynamisch)
     function MzD.reapplyGodFloor()
         if not MzD._isGod then return end
-        -- Herstel structuren naar origineel
         godRestoreStructures()
-        -- Herstel vloer
         godRestoreFloors()
-        -- Verwijder oude nanvloer
         for _, p in pairs(MzD._godCreatedParts or {}) do
             pcall(function() if p and p.Parent then p:Destroy() end end)
         end
         MzD._godCreatedParts = {}
-        -- Herbereken
+        
         local map = godHideOriginalFloors()
         twait(0.05)
         godLowerStructures()
