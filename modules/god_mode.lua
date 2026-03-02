@@ -1,8 +1,6 @@
 -- ============================================
--- [MODULE 10] GOD MODE - REVERSE EDITION (v34)
--- Fixes: Oneindige Nano-Vloer. Berekent nu de X én Z 
--- as van de hele map + bases, zodat je base nooit 
--- meer buiten de glazen vloer kan vallen.
+-- [MODULE 10] GOD MODE - REVERSE EDITION (v33 fixed)
+-- Nano-vloer op natuurlijke hoogte van de map.
 -- ============================================
 
 local M = {}
@@ -18,6 +16,7 @@ function M.init(Modules)
     local tdefer  = G.tdefer
     local sfind   = G.sfind
     local slower  = G.slower
+    local mabs    = G.mabs
     local mhuge   = G.mhuge
     local mmin    = G.mmin
     local isMzDPart       = Modules.utility.isMzDPart
@@ -25,61 +24,35 @@ function M.init(Modules)
     local buildSurfaceGui = Modules.utility.buildSurfaceGui
 
     -- ==========================================
-    -- NATUURLIJKE HOOGTE BEPALEN (Top van de vloer)
+    -- VLOER HOOGTE = dropdown waarde (GodFloorY)
+    -- Bovenkant nanovloer = GodFloorY + 2
     -- ==========================================
-    local function getMapNaturalTopY()
-        -- We pakken exact de Y positie van Slot 1 zodat de glazen vloer daar superstrak onder ligt
-        if workspace:FindFirstChild("Bases") then
-            for _, b in pairs(workspace.Bases:GetChildren()) do
-                local slots = b:FindFirstChild("Slots")
-                if slots then
-                    for _, s in pairs(slots:GetChildren()) do
-                        local pp = s.PrimaryPart or s:FindFirstChildWhichIsA("BasePart")
-                        if pp then
-                            return pp.Position.Y - 0.2 -- Net onder het voetstuk
-                        end
-                    end
+    local function getMapNaturalY()
+        return MzD.S.GodFloorY + 2
+    end
+
+    -- ==========================================
+    -- MAP X-RANGE BEPALEN
+    -- ==========================================
+    local function godDetectMapXRange(map)
+        local minX, maxX = -50, 4500
+        if map then
+            minX, maxX = mhuge, -mhuge
+            for _, d in pairs(map:GetDescendants()) do
+                if d:IsA("BasePart") and not isMzDPart(d) and d.Position.Y < 50 and d.Position.Y > -30 then
+                    local l = d.Position.X - d.Size.X/2
+                    local r = d.Position.X + d.Size.X/2
+                    if l < minX then minX = l end
+                    if r > maxX then maxX = r end
                 end
             end
+            if maxX <= minX then minX, maxX = -50, 4500 end
         end
-        return 0 -- Fallback
+        return minX-20, maxX+20
     end
 
     -- ==========================================
-    -- MAP X EN Z RANGE BEPALEN (De Oneindige Wereld)
-    -- ==========================================
-    local function godDetectMapRange()
-        local minX, maxX = mhuge, -mhuge
-        local minZ, maxZ = mhuge, -mhuge
-        local function chk(d)
-            if d:IsA("BasePart") and not isMzDPart(d) and d.Position.Y < 200 and d.Position.Y > -100 then
-                local lx = d.Position.X - d.Size.X/2
-                local rx = d.Position.X + d.Size.X/2
-                local lz = d.Position.Z - d.Size.Z/2
-                local rz = d.Position.Z + d.Size.Z/2
-                if lx < minX then minX = lx end
-                if rx > maxX then maxX = rx end
-                if lz < minZ then minZ = lz end
-                if rz > maxZ then maxZ = rz end
-            end
-        end
-        pcall(function()
-            local folders = {workspace:FindFirstChild("Map"), workspace:FindFirstChild("Bases"), workspace:FindFirstChild("GameObjects")}
-            for _, f in pairs(folders) do
-                if f then for _, d in pairs(f:GetDescendants()) do chk(d) end end
-            end
-        end)
-        
-        -- Fallbacks voor als de scan faalt
-        if maxX <= minX then minX, maxX = -2000, 2000 end
-        if maxZ <= minZ then minZ, maxZ = -2000, 2000 end
-        
-        -- Ruime extra padding zodat de vloer onzichtbaar ver doorloopt (Nooit meer afgronden)
-        return minX - 1000, maxX + 1000, minZ - 1000, maxZ + 1000
-    end
-
-    -- ==========================================
-    -- VLOEREN VERBERGEN (Originele map weghalen)
+    -- VLOEREN VERBERGEN
     -- ==========================================
     local function godFindFloorParts()
         local floors, map = {}, nil
@@ -119,10 +92,43 @@ function M.init(Modules)
         return floors, map
     end
 
+    -- Bereken de X/Z bounds van alle bases samen
+    local function getBaseBounds()
+        local minX, maxX, minZ, maxZ = mhuge, -mhuge, mhuge, -mhuge
+        if workspace:FindFirstChild("Bases") then
+            for _, b in pairs(workspace.Bases:GetChildren()) do
+                for _, d in pairs(b:GetDescendants()) do
+                    if d:IsA("BasePart") then
+                        local x1 = d.Position.X - d.Size.X/2
+                        local x2 = d.Position.X + d.Size.X/2
+                        local z1 = d.Position.Z - d.Size.Z/2
+                        local z2 = d.Position.Z + d.Size.Z/2
+                        if x1 < minX then minX = x1 end
+                        if x2 > maxX then maxX = x2 end
+                        if z1 < minZ then minZ = z1 end
+                        if z2 > maxZ then maxZ = z2 end
+                    end
+                end
+            end
+        end
+        if minX == mhuge then return nil end
+        return {minX=minX-5, maxX=maxX+5, minZ=minZ-5, maxZ=maxZ+5}
+    end
+
     local function godHideOriginalFloors()
         local floors, map = godFindFloorParts()
+        local baseBounds = getBaseBounds()
         MzD._godOriginalFloors = {}
         for _, p in pairs(floors) do
+            -- Skip vloer parts die ONDER een base liggen - die hebben we nodig voor brainrots
+            if baseBounds then
+                local px = p.Position.X
+                local pz = p.Position.Z
+                if px >= baseBounds.minX and px <= baseBounds.maxX
+                and pz >= baseBounds.minZ and pz <= baseBounds.maxZ then
+                    continue -- Laat deze vloer staan
+                end
+            end
             tinsert(MzD._godOriginalFloors, {
                 part = p, canCollide = p.CanCollide, transparency = p.Transparency,
             })
@@ -156,7 +162,6 @@ function M.init(Modules)
                 end)
                 local n = slower(c.Name)
                 if sfind(n,"kill") or sfind(n,"death") or sfind(n,"damage") then isKill = true end
-                
                 if isKill then
                     tinsert(MzD._godKillParts, {
                         part = c, canCollide = c.CanCollide, canTouch = c.CanTouch,
@@ -203,57 +208,92 @@ function M.init(Modules)
     end
 
     -- ==========================================
-    -- GIGANTISCHE NANO VLOER BOUWEN
+    -- NANO VLOER BOUWEN
+    -- Bovenkant vloer = naturalY (bovenkant Floor1 = waar brainrots op staan)
     -- ==========================================
-    local function godBuildEgaleVloer()
+    local function godBuildEgaleVloer(map)
         for _, p in pairs(MzD._godCreatedParts or {}) do pcall(function() if p then p:Destroy() end end) end
         MzD._godCreatedParts = {}
-        
-        local minX, maxX, minZ, maxZ = godDetectMapRange()
-        local naturalTopY = getMapNaturalTopY()
-        
+
+        local startX, endX = godDetectMapXRange(map)
+        local naturalY = getMapNaturalY()  -- bovenkant Floor1
+
+        local floorWidth = 420
         local floorThick = 4
-        local floorCenterY = naturalTopY - (floorThick / 2)
         local theme = getThemeColors(MzD)
 
-        -- Roblox laat geen Parts toe groter dan 2048, dus we bouwen een grid van gigantische platen
-        local maxSeg = 2000
-        for cx = minX, maxX, maxSeg do
-            for cz = minZ, maxZ, maxSeg do
-                local sx = mmin(maxSeg, maxX - cx)
-                local sz = mmin(maxSeg, maxZ - cz)
-                
-                if sx > 0 and sz > 0 then
-                    local px = cx + (sx / 2)
-                    local pz = cz + (sz / 2)
-                    
-                    local floor = Instance.new("Part")
-                    floor.Name = "MzDNanoFloor"
-                    floor.Size = Vector3.new(sx, floorThick, sz)
-                    floor.Position = Vector3.new(px, floorCenterY, pz)
-                    floor.Anchored = true floor.CanCollide = true
-                    floor.Color = Color3.fromRGB(15, 15, 15)
-                    floor.Material = Enum.Material.Glass
-                    floor.Transparency = 0.1
-                    floor.Reflectance = 0.3
-                    floor.Parent = workspace
-                    tinsert(MzD._godCreatedParts, floor)
+        local segLen = mabs(endX - startX)
+        local centerX = (startX + endX) / 2
 
-                    local light = Instance.new("SurfaceLight")
-                    light.Color = theme.stripe
-                    light.Brightness = 2
-                    light.Range = 20
-                    light.Face = Enum.NormalId.Top
-                    light.Angle = 180
-                    light.Parent = floor
+        -- Bovenkant van nanovloer = naturalY, center = naturalY - floorThick/2
+        local floorCenterY = naturalY - (floorThick / 2)
 
-                    -- Geeft elke tegel dat gave neon grid uiterlijk
-                    buildSurfaceGui(floor, Enum.NormalId.Top, theme)
-                end
-            end
+        local floor = Instance.new("Part")
+        floor.Name = "MzDNanoFloor"
+        floor.Size = Vector3.new(segLen, floorThick, floorWidth)
+        floor.Position = Vector3.new(centerX, floorCenterY, 0)
+        floor.Anchored = true floor.CanCollide = true
+        floor.Color = Color3.fromRGB(15, 15, 15)
+        floor.Material = Enum.Material.Glass
+        floor.Transparency = 0.1
+        floor.Reflectance = 0.3
+        floor.Parent = workspace
+        tinsert(MzD._godCreatedParts, floor)
+
+        local light = Instance.new("SurfaceLight")
+        light.Color = theme.stripe
+        light.Brightness = 2
+        light.Range = 20
+        light.Face = Enum.NormalId.Top
+        light.Angle = 180
+        light.Parent = floor
+
+        buildSurfaceGui(floor, Enum.NormalId.Top, theme)
+
+        local topY = floorCenterY + floorThick/2 + 0.1
+        for _, zPos in pairs({floorWidth/2-5, -floorWidth/2+5}) do
+            local s = Instance.new("Part")
+            s.Name = "MzDGodFloorStripe" s.Size = Vector3.new(segLen, 0.2, 2)
+            s.Position = Vector3.new(centerX, topY, zPos)
+            s.Anchored = true s.CanCollide = false
+            s.Color = theme.stripe s.Material = Enum.Material.Neon
+            s.Parent = workspace
+            tinsert(MzD._godCreatedParts, s)
+        end
+        local sm = Instance.new("Part")
+        sm.Name = "MzDGodFloorStripe" sm.Size = Vector3.new(segLen, 0.2, 1)
+        sm.Position = Vector3.new(centerX, topY, 0)
+        sm.Anchored = true sm.CanCollide = false
+        sm.Color = theme.stripe sm.Material = Enum.Material.Neon
+        sm.Parent = workspace
+        tinsert(MzD._godCreatedParts, sm)
+
+        local wallHeight = 50
+        local wallThickness = 2
+        local wallY = floorCenterY + (floorThick / 2) + (wallHeight / 2)
+        for _, zOffset in pairs({floorWidth/2 + wallThickness/2, -floorWidth/2 - wallThickness/2}) do
+            local wall = Instance.new("Part")
+            wall.Name = "MzDGodNanoWall"
+            wall.Size = Vector3.new(segLen, wallHeight, wallThickness)
+            wall.Position = Vector3.new(centerX, wallY, zOffset)
+            wall.Anchored = true wall.CanCollide = true
+            wall.Material = Enum.Material.ForceField
+            wall.Transparency = 0.7
+            wall.Color = theme.stripe
+            wall.Parent = workspace
+            tinsert(MzD._godCreatedParts, wall)
         end
 
-        MzD._actualGodWalkY = naturalTopY + 3
+        local catch = Instance.new("Part")
+        catch.Name = "MzDGodCatchFloor"
+        catch.Size = Vector3.new(segLen + 200, 2, floorWidth + 100)
+        catch.Position = Vector3.new(centerX, floorCenterY - 15, 0)
+        catch.Anchored = true catch.CanCollide = true catch.Transparency = 1
+        catch.Parent = workspace
+        tinsert(MzD._godCreatedParts, catch)
+
+        -- WalkY = bovenkant nanovloer + kleine offset zodat speler er netjes op staat
+        MzD._actualGodWalkY = naturalY + 3
         return true
     end
 
@@ -265,10 +305,8 @@ function M.init(Modules)
         if not hrp then return end
         local hum = Player.Character:FindFirstChild("Humanoid")
         hrp.Velocity = Vector3.new(0,0,0)
-        
         local targetY = MzD._actualGodWalkY or MzD.S.GodWalkY
         hrp.CFrame = CFrame.new(hrp.Position.X, targetY, hrp.Position.Z)
-        
         if hum then
             pcall(function()
                 hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
@@ -289,6 +327,7 @@ function M.init(Modules)
                     local hrp = ch:FindFirstChild("HumanoidRootPart")
                     local hum = ch:FindFirstChild("Humanoid")
 
+                    -- Verberg originele vloeren periodiek
                     if tick() - MzD._godFloorCacheTime > 5 then
                         for _, data in pairs(MzD._godOriginalFloors or {}) do
                             if data.part and data.part.Parent then
@@ -315,10 +354,11 @@ function M.init(Modules)
                         end)
                     end
 
-                    local catchY = (MzD._actualGodWalkY or MzD.S.GodWalkY) - 30
+                    local walkY = MzD._actualGodWalkY or MzD.S.GodWalkY
+                    local catchY = walkY - 30
                     if hrp and hrp.Position.Y < catchY then
                         hrp.Velocity = Vector3.new(0,0,0)
-                        hrp.CFrame   = CFrame.new(hrp.Position.X, MzD._actualGodWalkY or MzD.S.GodWalkY, hrp.Position.Z)
+                        hrp.CFrame = CFrame.new(hrp.Position.X, walkY, hrp.Position.Z)
                     end
                 end)
                 twait(0.5)
@@ -355,11 +395,11 @@ function M.init(Modules)
             end)
         end)
     end
-    
-    M.godTeleportUnder = godTeleportUnder
+
+    M.godTeleportUnder  = godTeleportUnder
     M.godBuildEgaleVloer = godBuildEgaleVloer
     M.godDisableKillParts = godDisableKillParts
-    M.godSetupHealth = godSetupHealth
+    M.godSetupHealth    = godSetupHealth
 
     -- ==========================================
     -- ENABLE / DISABLE
@@ -370,9 +410,9 @@ function M.init(Modules)
         local killCount = godDisableKillParts()
         godStartKillWatcher()
         twait(0.1)
-        godHideOriginalFloors()
+        local map = godHideOriginalFloors()
         twait(0.1)
-        godBuildEgaleVloer()
+        godBuildEgaleVloer(map)
         twait(0.2)
         godStartLoop()
         twait(0.1)
@@ -387,11 +427,9 @@ function M.init(Modules)
         godRestoreFloors()
         for _, p in pairs(MzD._godCreatedParts or {}) do pcall(function() if p then p:Destroy() end end) end
         MzD._godCreatedParts = {}
-        
+        local map = godHideOriginalFloors()
         twait(0.05)
-        godHideOriginalFloors()
-        twait(0.05)
-        godBuildEgaleVloer()
+        godBuildEgaleVloer(map)
         twait(0.05)
         godTeleportUnder()
     end
@@ -406,7 +444,6 @@ function M.init(Modules)
         godRestoreKillParts()
         for _, p in pairs(MzD._godCreatedParts or {}) do pcall(function() if p then p:Destroy() end end) end
         MzD._godCreatedParts = {}
-        
         local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
         if hrp then hrp.Velocity = Vector3.new(0,0,0) hrp.CFrame = CFrame.new(hrp.Position.X, 10, hrp.Position.Z) end
         local ch = Player.Character
