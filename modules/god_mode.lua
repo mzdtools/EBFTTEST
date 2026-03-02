@@ -1,9 +1,8 @@
 -- ============================================
--- [MODULE 10] GOD MODE - NANO EDITION (v36)
--- Fixes: De glorieuze Runway Vloer is TERUG! 
--- Dynamisch schaalbaar (geen gaten meer), behoudt 
--- GodFloorY instelling, en verplaatst shops 
--- veilig via de PivotTo methode.
+-- [MODULE 10] GOD MODE - NANO EDITION (v37)
+-- Fixes: "Best of Both Worlds". Shops gebruiken PivotTo(),
+-- Bases en poppetjes (brainrots) gebruiken de Rig-Scanner (Nekvel)
+-- zodat de server ze netjes op -10 laat staan!
 -- ============================================
 
 local M = {}
@@ -56,7 +55,6 @@ function M.init(Modules)
         if not found or maxX <= minX then minX, maxX = -50, 4500 end
         if not found or maxZ <= minZ then minZ, maxZ = -250, 250 end
         
-        -- Ruime extra padding zodat alles mooi binnen de muren valt
         return minX - 200, maxX + 200, minZ - 300, maxZ + 300
     end
 
@@ -155,7 +153,7 @@ function M.init(Modules)
     end
 
     -- ==========================================
-    -- DE GLORIEUZE NANO VLOER BOUWEN
+    -- NANO VLOER BOUWEN
     -- ==========================================
     local function godBuildEgaleVloer()
         for _, p in pairs(MzD._godCreatedParts or {}) do pcall(function() if p then p:Destroy() end end) end
@@ -167,9 +165,8 @@ function M.init(Modules)
         local theme = getThemeColors(MzD)
         
         local centerZ = (minZ + maxZ) / 2
-        local maxSeg = 2000 -- Om Roblox limieten te voorkomen
+        local maxSeg = 2000
         
-        -- Grid builder voor de vloer platen (zodat oneindige mappen niet glitchen)
         local curX = minX
         while curX < maxX do
             local segLenX = mmin(maxSeg, maxX - curX)
@@ -204,10 +201,8 @@ function M.init(Modules)
                 curZ = curZ + segLenZ
             end
             
-            -- Runway Aesthetics: Lijnen en Muren (Alleen op de uiterste grenzen!)
             local topY = floorY + floorThick/2 + 0.1
             
-            -- Rand Strepen (Neon)
             for _, zPos in pairs({minZ + 5, maxZ - 5}) do
                 local s = Instance.new("Part")
                 s.Name = "MzDGodFloorStripe" s.Size = Vector3.new(segLenX, 0.2, 2)
@@ -218,7 +213,6 @@ function M.init(Modules)
                 tinsert(MzD._godCreatedParts, s)
             end
             
-            -- Midden Streep
             local sm = Instance.new("Part")
             sm.Name = "MzDGodFloorStripe" sm.Size = Vector3.new(segLenX, 0.2, 1)
             sm.Position = Vector3.new(centerX, topY, centerZ)
@@ -227,7 +221,6 @@ function M.init(Modules)
             sm.Parent = workspace
             tinsert(MzD._godCreatedParts, sm)
             
-            -- ForceField Muren (Zijkanten van de hele map)
             local wallHeight = 50
             local wallThickness = 2
             local wallY = floorY + (floorThick / 2) + (wallHeight / 2)
@@ -247,7 +240,6 @@ function M.init(Modules)
             curX = curX + segLenX
         end
         
-        -- Onzichtbare vang-vloer er net onder
         local catch = Instance.new("Part")
         catch.Name = "MzDGodCatchFloor"
         catch.Size = Vector3.new(mabs(maxX - minX) + 200, 2, mabs(maxZ - minZ) + 200)
@@ -260,7 +252,7 @@ function M.init(Modules)
     end
 
     -- ==========================================
-    -- STRUCTUREN VERLAGEN (Veilige Pivot Methode)
+    -- STRUCTUREN VERLAGEN (De Hybride Oplossing)
     -- ==========================================
     local function getModelTrueBottom(model)
         local fallbackLowest = mhuge
@@ -274,7 +266,6 @@ function M.init(Modules)
                 
                 if sfind(n, "radius") or sfind(n, "roof") or sfind(n, "ceiling") or sfind(n, "sky") then continue end
                 if d.Position.Y > 200 then continue end
-                
                 if bottom < fallbackLowest then fallbackLowest = bottom end
                 
                 local area = d.Size.X * d.Size.Z
@@ -315,32 +306,51 @@ function M.init(Modules)
         return getModelTrueBottom(base)
     end
 
-    -- Verplaatst poppetjes en modellen zonder hun botten te breken
-    local function godMoveSafely(obj, deltaY)
-        if not obj or MzD._godMovedSet[obj] then return end
-
-        if obj:IsA("Model") then
-            local cp = obj:GetPivot()
-            tinsert(MzD._godMovedParts, {model = obj, origPivot = cp})
-            MzD._godMovedSet[obj] = true
-            pcall(function() obj:PivotTo(cp + Vector3.new(0, deltaY, 0)) end)
+    -- [1] DE NEKVEL SCANNER (Alleen voor de Base en zijn poppetjes)
+    local function godMoveDescendants(parentObj, deltaY)
+        local skipSet = {}
+        for _, d in pairs(parentObj:GetDescendants()) do
+            if skipSet[d] then continue end
             
-            -- Markeer alles zodat het niet dubbel gepakt wordt
-            for _, d in pairs(obj:GetDescendants()) do
+            -- Is het een geanimeerd poppetje? Pak dan alleen de HumanoidRootPart
+            if d:IsA("Model") and d:FindFirstChild("Humanoid") and d:FindFirstChild("HumanoidRootPart") then
+                local hrp = d.HumanoidRootPart
+                if not MzD._godMovedSet[hrp] then
+                    tinsert(MzD._godMovedParts, {part = hrp, origCF = hrp.CFrame})
+                    MzD._godMovedSet[hrp] = true
+                    pcall(function() hrp.CFrame = hrp.CFrame + Vector3.new(0, deltaY, 0) end)
+                end
+                -- Negeer de rest van het lichaampje (armen, benen) zodat ze niet kapot scheuren
+                for _, sub in pairs(d:GetDescendants()) do
+                    MzD._godMovedSet[sub] = true
+                    skipSet[sub] = true
+                end
                 MzD._godMovedSet[d] = true
+                continue
             end
-            return
+            
+            -- Voor normale statische base-parts
+            if d:IsA("BasePart") and not isMzDPart(d) and not MzD._godMovedSet[d] then
+                tinsert(MzD._godMovedParts, {part = d, origCF = d.CFrame})
+                MzD._godMovedSet[d] = true
+                pcall(function() d.CFrame = d.CFrame + Vector3.new(0, deltaY, 0) end)
+            end
         end
+    end
 
-        if obj:IsA("BasePart") and not isMzDPart(obj) then
-            tinsert(MzD._godMovedParts, {part = obj, origCF = obj.CFrame})
-            MzD._godMovedSet[obj] = true
-            pcall(function() obj.CFrame = obj.CFrame + Vector3.new(0, deltaY, 0) end)
-            return
-        end
-
-        for _, child in pairs(obj:GetChildren()) do
-            godMoveSafely(child, deltaY)
+    -- [2] DE PIVOT DOOS (Alleen voor Shops en objecten)
+    local function godPivotModel(model, deltaY)
+        if not model or MzD._godMovedSet[model] then return end
+        if model:IsA("Model") then
+            local cp = model:GetPivot()
+            tinsert(MzD._godMovedParts, {model = model, origPivot = cp})
+            MzD._godMovedSet[model] = true
+            pcall(function() model:PivotTo(cp + Vector3.new(0, deltaY, 0)) end)
+            for _, d in pairs(model:GetDescendants()) do MzD._godMovedSet[d] = true end
+        elseif model:IsA("BasePart") then
+            tinsert(MzD._godMovedParts, {part = model, origCF = model.CFrame})
+            MzD._godMovedSet[model] = true
+            pcall(function() model.CFrame = model.CFrame + Vector3.new(0, deltaY, 0) end)
         end
     end
 
@@ -351,7 +361,7 @@ function M.init(Modules)
 
         local floorTop = MzD.S.GodFloorY + 2 
 
-        -- 1. Bases
+        -- 1. Bases (Krijgt de veilige Nekvel behandeling)
         if workspace:FindFirstChild("Bases") then
             for _, base in pairs(workspace.Bases:GetChildren()) do
                 local trueBottom = getBaseFloorBottom(base)
@@ -359,20 +369,21 @@ function M.init(Modules)
                     local deltaY = floorTop - trueBottom
                     if mabs(deltaY) < 500 then
                         MzD._baseDeltas[base] = deltaY
-                        godMoveSafely(base, deltaY)
+                        MzD._godMovedSet[base] = true
+                        godMoveDescendants(base, deltaY)
                     end
                 end
             end
         end
 
-        -- 2. Workspace Objecten
+        -- 2. Workspace Shops/Wheels (Krijgen de PivotTo doos)
         local function tryMoveWorkspaceObj(name)
             local obj = workspace:FindFirstChild(name)
             if not obj then return end
             local trueBottom = getModelTrueBottom(obj)
             if trueBottom == mhuge then return end
             local deltaY = floorTop - trueBottom
-            if mabs(deltaY) < 500 then godMoveSafely(obj, deltaY) end
+            if mabs(deltaY) < 500 then godPivotModel(obj, deltaY) end
         end
 
         tryMoveWorkspaceObj("DoomWheel")
@@ -391,27 +402,27 @@ function M.init(Modules)
                     local trueBottom = getModelTrueBottom(c)
                     if trueBottom ~= mhuge then
                         local deltaY = floorTop - trueBottom
-                        if mabs(deltaY) < 500 then godMoveSafely(c, deltaY) end
+                        if mabs(deltaY) < 500 then godPivotModel(c, deltaY) end
                     end
                 end
             end
         end
 
-        -- 3. Game Objects
+        -- 3. Game Objects (Krijgen de PivotTo doos)
         local go = workspace:FindFirstChild("GameObjects")
         if go then
             local ps = go:FindFirstChild("PlaceSpecific", true)
             if ps then
                 local root = ps:FindFirstChild("root")
                 if root then
-                    local trueBottomTargets = {"MysteryMerchant", "SiteEventDetails", "PlazaPortal", "SellStand", "UpgradeShop"}
-                    for _, name in pairs(trueBottomTargets) do
+                    local targets = {"MysteryMerchant", "SiteEventDetails", "PlazaPortal", "SellStand", "UpgradeShop"}
+                    for _, name in pairs(targets) do
                         local obj = root:FindFirstChild(name)
                         if obj then
                             local trueBottom = getModelTrueBottom(obj)
                             if trueBottom ~= mhuge then
                                 local deltaY = floorTop - trueBottom
-                                if mabs(deltaY) < 500 then godMoveSafely(obj, deltaY) end
+                                if mabs(deltaY) < 500 then godPivotModel(obj, deltaY) end
                             end
                         end
                     end
@@ -422,7 +433,7 @@ function M.init(Modules)
                             local trueBottom = getModelTrueBottom(machine)
                             if trueBottom ~= mhuge then
                                 local deltaY = floorTop - trueBottom
-                                if mabs(deltaY) < 500 then godMoveSafely(machine, deltaY) end
+                                if mabs(deltaY) < 500 then godPivotModel(machine, deltaY) end
                             end
                         end
                     end
@@ -434,7 +445,7 @@ function M.init(Modules)
                             local trueBottom = getModelTrueBottom(main)
                             if trueBottom ~= mhuge then
                                 local deltaY = floorTop - trueBottom
-                                if mabs(deltaY) < 500 then godMoveSafely(main, deltaY) end
+                                if mabs(deltaY) < 500 then godPivotModel(main, deltaY) end
                             end
                         end
                     end
@@ -492,7 +503,7 @@ function M.init(Modules)
                         MzD._godFloorCacheTime = tick()
                     end
 
-                    -- Magneet voor nieuwe brainrots
+                    -- MAGNEET: Pakt nieuwe poppetjes direct bij hun nekvel (HRP)
                     if workspace:FindFirstChild("Bases") then
                         local myBase = nil
                         if MzD.baseGUID then myBase = workspace.Bases:FindFirstChild(MzD.baseGUID) end
@@ -512,15 +523,33 @@ function M.init(Modules)
                         if myBase then
                             local delta = MzD._baseDeltas and MzD._baseDeltas[myBase]
                             if delta then
-                                for _, child in pairs(myBase:GetChildren()) do
-                                    if not MzD._godMovedSet[child] then godMoveSafely(child, delta) end
-                                end
-                                local slotsDir = myBase:FindFirstChild("Slots")
-                                if slotsDir then
-                                    for _, child in pairs(slotsDir:GetChildren()) do
-                                        if not MzD._godMovedSet[child] then godMoveSafely(child, delta) end
+                                local function checkNew(parent)
+                                    for _, child in pairs(parent:GetChildren()) do
+                                        if not MzD._godMovedSet[child] then
+                                            MzD._godMovedSet[child] = true
+                                            
+                                            -- Als het een levend poppetje is: Nekvel Grab
+                                            if child:IsA("Model") and child:FindFirstChild("Humanoid") and child:FindFirstChild("HumanoidRootPart") then
+                                                local hrp = child.HumanoidRootPart
+                                                tinsert(MzD._godMovedParts, {part = hrp, origCF = hrp.CFrame})
+                                                MzD._godMovedSet[hrp] = true
+                                                for _, sub in pairs(child:GetDescendants()) do MzD._godMovedSet[sub] = true end
+                                                pcall(function() hrp.CFrame = hrp.CFrame + Vector3.new(0, delta, 0) end)
+                                            else
+                                                -- Voor normale dingen op de base
+                                                godMoveDescendants(child, delta)
+                                                if child:IsA("BasePart") and not isMzDPart(child) then
+                                                    tinsert(MzD._godMovedParts, {part = child, origCF = child.CFrame})
+                                                    pcall(function() child.CFrame = child.CFrame + Vector3.new(0, delta, 0) end)
+                                                end
+                                            end
+                                        end
                                     end
                                 end
+                                
+                                checkNew(myBase)
+                                local slotsDir = myBase:FindFirstChild("Slots")
+                                if slotsDir then checkNew(slotsDir) end
                             end
                         end
                     end
@@ -604,7 +633,7 @@ function M.init(Modules)
         godTeleportUnder()
         twait(0.1)
         if Player.Character then godSetupHealth(Player.Character) end
-        MzD.Status.god = "Aan (Y="..MzD.S.GodWalkY.." Masterpiece Runway)"
+        MzD.Status.god = "Aan (Y="..MzD.S.GodWalkY.." Hybride Mode)"
     end
 
     function MzD.reapplyGodFloor()
@@ -622,7 +651,7 @@ function M.init(Modules)
         godBuildEgaleVloer()
         twait(0.05)
         godTeleportUnder()
-        MzD.Status.god = "Aan (Y="..MzD.S.GodWalkY.." Masterpiece Runway)"
+        MzD.Status.god = "Aan (Y="..MzD.S.GodWalkY.." Hybride Mode)"
     end
 
     function MzD.disableGod()
