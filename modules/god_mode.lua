@@ -29,21 +29,19 @@ function M.init(Modules)
         CATCH_FLOOR_OFFSET_Y = -15,
         MAX_SEGMENT_LENGTH   = 2000,
         STRUCTURE_OFFSET_Y   = 3.5,
+        STRUCTURE_MAX_DELTA  = 300,   -- max toegestane deltaY bij structuren
         FALL_MARGIN          = 30,
         FLOOR_RECHECK_SECS   = 5,
         LOOP_INTERVAL        = 0.5,
     }
 
     -- ============================================
-    -- HELPER
+    -- HELPER: GameObjects.PlaceSpecific.root
+    -- Gedeeld via map_utils als MzD.mapGetGameObjectsRoot()
     -- ============================================
 
     local function findGameObjectsRoot()
-        local gameObjects = workspace:FindFirstChild("GameObjects")
-        if not gameObjects then return nil end
-        local placeSpecific = gameObjects:FindFirstChild("PlaceSpecific", true)
-        if not placeSpecific then return nil end
-        return placeSpecific:FindFirstChild("root")
+        return MzD.mapGetGameObjectsRoot and MzD.mapGetGameObjectsRoot()
     end
 
     -- ============================================
@@ -168,6 +166,7 @@ function M.init(Modules)
             end
         end
 
+        -- Misc.Ground verbergen zodat je erdoorheen valt
         local root = findGameObjectsRoot()
         if root then
             local misc = root:FindFirstChild("Misc")
@@ -266,6 +265,7 @@ function M.init(Modules)
             currentX = currentX + segmentLength
         end
 
+        -- Onzichtbaar vangnet eronder
         local catchFloor        = Instance.new("Part")
         catchFloor.Name         = "MzDGodCatchFloor"
         catchFloor.Size         = Vector3.new(
@@ -297,58 +297,104 @@ function M.init(Modules)
     -- ============================================
 
     local function lowerStructuresToGodFloor()
-        MzD._godMovedParts = {}
-        local targetY      = MzD.S.GodFloorY + CONFIG.STRUCTURE_OFFSET_Y
-        local root         = findGameObjectsRoot()
+        MzD._godMovedParts  = {}
+        local targetY       = MzD.S.GodFloorY + CONFIG.STRUCTURE_OFFSET_Y
+        local root          = findGameObjectsRoot()
         local objectsToMove = {}
 
+        -- Alle bases (inclusief eigen base)
         if workspace:FindFirstChild("Bases") then
             for _, base in ipairs(workspace.Bases:GetChildren()) do
-                tinsert(objectsToMove, base)
+                tinsert(objectsToMove, { obj = base, isBase = true })
             end
         end
-        for _, name in ipairs({ "DoomWheel", "LimitedShop" }) do
+
+        -- Directe workspace objecten
+        for _, name in ipairs({ "DoomWheel", "LimitedShop", "FireAndIceWheel" }) do
             local obj = workspace:FindFirstChild(name)
-            if obj then tinsert(objectsToMove, obj) end
+            if obj then tinsert(objectsToMove, { obj = obj, isBase = false }) end
         end
+
+        -- GameObjects root
         if root then
-            for _, name in ipairs({ "UpgradeShop", "PlazaPortal", "SiteEventDetails" }) do
+            for _, name in ipairs({ "UpgradeShop", "PlazaPortal", "SiteEventDetails", "SellStand", "WaveMachine" }) do
                 local obj = root:FindFirstChild(name)
-                if obj then tinsert(objectsToMove, obj) end
+                if obj then tinsert(objectsToMove, { obj = obj, isBase = false }) end
             end
             local spawnMachines = root:FindFirstChild("SpawnMachines")
             if spawnMachines then
                 local default = spawnMachines:FindFirstChild("Default")
-                if default then tinsert(objectsToMove, default) end
+                if default then tinsert(objectsToMove, { obj = default, isBase = false }) end
             end
         end
 
-        for _, obj in ipairs(objectsToMove) do
+        for _, entry in ipairs(objectsToMove) do
+            local obj = entry.obj
+
+            -- Zoek groundY via naam
             local groundY = nil
             for _, desc in ipairs(obj:GetDescendants()) do
                 if desc:IsA("BasePart") then
-                    local name = string.lower(desc.Name)
-                    if name == "ground" or name == "floor" or string.find(name, "baseplate") then
+                    local n = string.lower(desc.Name)
+                    if n == "ground" or n == "floor" or n == "primary"
+                       or string.find(n, "baseplate") then
                         groundY = desc.Position.Y break
                     end
                 end
             end
+
+            -- Fallback: laagste part (skip slot brainrots bij bases)
             if not groundY then
                 local lowestY = mhuge
                 for _, desc in ipairs(obj:GetDescendants()) do
-                    if desc:IsA("BasePart") and desc.Position.Y < lowestY then
-                        lowestY = desc.Position.Y
+                    if desc:IsA("BasePart") then
+                        -- Skip brainrot slot contents bij bases
+                        if entry.isBase then
+                            local parent = desc.Parent
+                            local isBrainrot = false
+                            while parent and parent ~= obj do
+                                if parent.Name:find("brainrot") then
+                                    isBrainrot = true break
+                                end
+                                parent = parent.Parent
+                            end
+                            if isBrainrot then continue end
+                        end
+                        if desc.Position.Y < lowestY then lowestY = desc.Position.Y end
                     end
                 end
                 if lowestY ~= mhuge then groundY = lowestY end
             end
-            if groundY then
-                local deltaY = targetY - groundY
-                for _, desc in ipairs(obj:GetDescendants()) do
-                    if desc:IsA("BasePart") and not isMzDPart(desc) then
-                        tinsert(MzD._godMovedParts, { part = desc, originalCFrame = desc.CFrame })
-                        desc.CFrame = desc.CFrame + Vector3.new(0, deltaY, 0)
+
+            if not groundY then continue end
+
+            local deltaY = targetY - groundY
+
+            -- Skip als deltaY absurd groot is
+            if mabs(deltaY) > CONFIG.STRUCTURE_MAX_DELTA then
+                warn(string.format("[GodMode] Skip %s — deltaY=%.1f (te groot)", obj.Name, deltaY))
+                continue
+            end
+
+            -- Skip als al op juiste hoogte
+            if mabs(deltaY) < 0.1 then continue end
+
+            -- Verplaats alle parts (skip brainrot slots bij bases)
+            for _, desc in ipairs(obj:GetDescendants()) do
+                if desc:IsA("BasePart") and not isMzDPart(desc) then
+                    if entry.isBase then
+                        local parent = desc.Parent
+                        local isBrainrot = false
+                        while parent and parent ~= obj do
+                            if parent.Name:find("brainrot") then
+                                isBrainrot = true break
+                            end
+                            parent = parent.Parent
+                        end
+                        if isBrainrot then continue end
                     end
+                    tinsert(MzD._godMovedParts, { part = desc, originalCFrame = desc.CFrame })
+                    desc.CFrame = desc.CFrame + Vector3.new(0, deltaY, 0)
                 end
             end
         end
@@ -363,6 +409,64 @@ function M.init(Modules)
             end)
         end
         MzD._godMovedParts = {}
+    end
+
+    -- ============================================
+    -- BRAINROT SLOT REPAIR
+    -- Snapt verschoven brainrots terug naar hun slot
+    -- Alleen Root (anchored) wordt verplaatst —
+    -- gewelde parts volgen automatisch
+    -- ============================================
+
+    local function repairBrainrotSlots()
+        local bases = workspace:FindFirstChild("Bases")
+        if not bases then return end
+
+        for _, base in ipairs(bases:GetChildren()) do
+            local slotsFolder = base:FindFirstChild("Slots")
+            if not slotsFolder then continue end
+
+            for _, slot in ipairs(slotsFolder:GetChildren()) do
+                local slotNum = slot.Name:match("Slot(%d+)")
+                if not slotNum then continue end
+
+                local brainrotModel = base:FindFirstChild("slot " .. slotNum .. " brainrot")
+                if not brainrotModel then continue end
+
+                -- Referentiepositie: de Base part van de Slot
+                local slotBase = slot:FindFirstChild("Base")
+                if not slotBase or not slotBase:IsA("BasePart") then continue end
+                local targetY = slotBase.Position.Y
+
+                -- Vind de Root (anchored) part van de brainrot
+                local rootPart = nil
+                for _, desc in ipairs(brainrotModel:GetDescendants()) do
+                    if desc:IsA("BasePart") and desc.Anchored and desc.Name == "Root" then
+                        rootPart = desc break
+                    end
+                end
+                -- Fallback: eerste anchored part
+                if not rootPart then
+                    for _, desc in ipairs(brainrotModel:GetDescendants()) do
+                        if desc:IsA("BasePart") and desc.Anchored then
+                            rootPart = desc break
+                        end
+                    end
+                end
+                if not rootPart then continue end
+
+                -- Alleen fixen als nodig
+                if mabs(rootPart.Position.Y - targetY) <= 2 then continue end
+
+                pcall(function()
+                    rootPart.CFrame = CFrame.new(
+                        rootPart.Position.X,
+                        targetY,
+                        rootPart.Position.Z
+                    )
+                end)
+            end
+        end
     end
 
     -- ============================================
@@ -458,6 +562,7 @@ function M.init(Modules)
                     local rootPart = character:FindFirstChild("HumanoidRootPart")
                     local humanoid = character:FindFirstChild("Humanoid")
 
+                    -- Periodieke vloer/killpart hercheck
                     floorRecheckTimer += CONFIG.LOOP_INTERVAL
                     if floorRecheckTimer >= CONFIG.FLOOR_RECHECK_SECS then
                         floorRecheckTimer = 0
@@ -472,6 +577,7 @@ function M.init(Modules)
                         reapplyKillPartDisable()
                     end
 
+                    -- Anti-ragdoll
                     if humanoid then
                         pcall(function()
                             humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
@@ -486,6 +592,7 @@ function M.init(Modules)
                         end)
                     end
 
+                    -- Val-detectie
                     if rootPart and rootPart.Position.Y < MzD.S.GodWalkY - CONFIG.FALL_MARGIN then
                         rootPart.Velocity = Vector3.new(0, 0, 0)
                         rootPart.CFrame   = CFrame.new(
@@ -515,6 +622,9 @@ function M.init(Modules)
         twait(0.1)
 
         lowerStructuresToGodFloor()
+        twait(0.1)
+
+        repairBrainrotSlots()   -- ← fix verschoven brainrots
         twait(0.1)
 
         buildGodFloor(map)
@@ -553,10 +663,11 @@ function M.init(Modules)
         end
 
         restoreOriginalFloors()
-        restoreStructures()
+        restoreStructures()     -- ← zet structuren terug, brainrots volgen automatisch
         restoreKillParts()
         destroyGodFloor()
 
+        -- Teleporteer speler terug omhoog
         local character = Player.Character
         local rootPart  = character and character:FindFirstChild("HumanoidRootPart")
         if rootPart then
@@ -564,6 +675,7 @@ function M.init(Modules)
             rootPart.CFrame   = CFrame.new(rootPart.Position.X, 10, rootPart.Position.Z)
         end
 
+        -- Herstel originele health
         if character then
             for _, ff in ipairs(character:GetChildren()) do
                 if ff:IsA("ForceField") then ff:Destroy() end
