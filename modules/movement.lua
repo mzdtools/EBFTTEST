@@ -1,79 +1,79 @@
 -- ============================================
 -- [MODULE 11] MOVEMENT & NAVIGATION
 -- ============================================
-
 local M = {}
 
 function M.init(Modules)
-    local G   = Modules.globals
-    local MzD = G.MzD
+    local G            = Modules.globals
+    local MzD          = G.MzD
     local Player       = G.Player
     local TweenService = G.TweenService
-    local sfind        = G.sfind
     local twait        = G.twait
+
+    -- ============================================
+    -- EQUIP / UNEQUIP
+    -- ============================================
 
     function MzD.safeEquip(tool)
         if not tool then return end
-        local ch  = Player.Character if not ch then return end
-        local hum = ch:FindFirstChild("Humanoid") if not hum then return end
-        pcall(function() hum:EquipTool(tool) end) twait(0.4)
+        local character = Player.Character if not character then return end
+        local humanoid  = character:FindFirstChild("Humanoid") if not humanoid then return end
+        pcall(function() humanoid:EquipTool(tool) end)
+        twait(0.4)
     end
 
     function MzD.safeUnequip()
-        local ch  = Player.Character if not ch then return end
-        local hum = ch:FindFirstChild("Humanoid") if not hum then return end
-        pcall(function() hum:UnequipTools() end) twait(0.2)
+        local character = Player.Character if not character then return end
+        local humanoid  = character:FindFirstChild("Humanoid") if not humanoid then return end
+        pcall(function() humanoid:UnequipTools() end)
+        twait(0.2)
     end
 
+    -- ============================================
+    -- TWEEN HELPERS
+    -- Intern: één functie met snelheidsparameter
+    -- ============================================
+
+    local function tweenAtSpeed(cf, speed)
+        local character = Player.Character if not character then return false end
+        local rootPart  = character:FindFirstChild("HumanoidRootPart") if not rootPart then return false end
+        local targetCF  = MzD._isGod
+            and CFrame.new(cf.Position.X, MzD.S.GodWalkY, cf.Position.Z)
+            or  cf
+        local duration  = math.max((rootPart.Position - targetCF.Position).Magnitude / speed, 0.005)
+        local tween     = TweenService:Create(rootPart, TweenInfo.new(duration, Enum.EasingStyle.Linear), { CFrame = targetCF })
+        tween:Play()
+        tween.Completed:Wait()
+        return true
+    end
+
+    -- Normaal: gebruikt MzD.S.TweenSpeed (instelbaar)
     function MzD.tweenTo(cf)
-        local ch  = Player.Character if not ch then return false end
-        local hrp = ch:FindFirstChild("HumanoidRootPart") if not hrp then return false end
-        local targetCF = MzD._isGod and CFrame.new(cf.Position.X, MzD.S.GodWalkY, cf.Position.Z) or cf
-        local t = math.max((hrp.Position - targetCF.Position).Magnitude / MzD.S.TweenSpeed, 0.01)
-        local tw = TweenService:Create(hrp, TweenInfo.new(t, Enum.EasingStyle.Linear), {CFrame = targetCF})
-        tw:Play() tw.Completed:Wait() return true
+        return tweenAtSpeed(cf, math.max(MzD.S.TweenSpeed or 9999, 50))
     end
 
+    -- Instant: vaste maximale snelheid
     function MzD.fastTween(cf)
-        local ch  = Player.Character if not ch then return false end
-        local hrp = ch:FindFirstChild("HumanoidRootPart") if not hrp then return false end
-        local targetCF = MzD._isGod and CFrame.new(cf.Position.X, MzD.S.GodWalkY, cf.Position.Z) or cf
-        local t = math.max((hrp.Position - targetCF.Position).Magnitude / 99999, 0.005)
-        local tw = TweenService:Create(hrp, TweenInfo.new(t, Enum.EasingStyle.Linear), {CFrame = targetCF})
-        tw:Play() tw.Completed:Wait() return true
+        return tweenAtSpeed(cf, 99999)
     end
 
+    -- Corridor: gebruikt MzD.S.CorridorSpeed (aparte instelling)
     function MzD.corridorTween(cf)
-        local ch  = Player.Character if not ch then return false end
-        local hrp = ch:FindFirstChild("HumanoidRootPart") if not hrp then return false end
-        local targetCF = MzD._isGod and CFrame.new(cf.Position.X, MzD.S.GodWalkY, cf.Position.Z) or cf
-        local speed = math.max(MzD.S.CorridorSpeed or 1500, 50)
-        local t = math.max((hrp.Position - targetCF.Position).Magnitude / speed, 0.01)
-        local tw = TweenService:Create(hrp, TweenInfo.new(t, Enum.EasingStyle.Linear), {CFrame = targetCF})
-        tw:Play() tw.Completed:Wait() return true
+        return tweenAtSpeed(cf, math.max(MzD.S.CorridorSpeed or 1500, 50))
     end
 
-    function MzD.mapFindCurrentMap()
-        local best, bc = nil, 0
-        for _, c in pairs(workspace:GetChildren()) do
-            if c:IsA("Model") and sfind(c.Name,"Map") and not sfind(c.Name,"SharedInstances") then
-                if c:FindFirstChild("Spawners") or c:FindFirstChild("Gaps") or c:FindFirstChild("RightWalls")
-                   or c:FindFirstChild("FirstFloor") or c:FindFirstChild("Ground") then return c end
-                local cnt = 0
-                for _, d in pairs(c:GetDescendants()) do if d:IsA("BasePart") then cnt += 1 end if cnt > 10 then return c end end
-                if cnt > bc then bc = cnt best = c end
-            end
-        end
-        return best
-    end
+    -- ============================================
+    -- MUUR / CORRIDOR DETECTIE
+    -- MzD.mapFindCurrentMap() komt uit map_utils — niet hier herdefinieren
+    -- ============================================
 
     function MzD.detectWallZ()
         local map = MzD.mapFindCurrentMap() if not map then return end
-        local mzwalls = map:FindFirstChild("MzDHubWalls") if not mzwalls then return end
-        local fw = mzwalls:FindFirstChild("FrontWall_1")
-        local bw = mzwalls:FindFirstChild("BackWall_1")
-        if fw then MzD._wallZ_front = fw.Position.Z - fw.Size.Z/2 - 3 end
-        if bw then MzD._wallZ_back  = bw.Position.Z + bw.Size.Z/2 + 3 end
+        local wallFolder = map:FindFirstChild("MzDHubWalls") if not wallFolder then return end
+        local frontWall  = wallFolder:FindFirstChild("FrontWall_1")
+        local backWall   = wallFolder:FindFirstChild("BackWall_1")
+        if frontWall then MzD._wallZ_front = frontWall.Position.Z - frontWall.Size.Z / 2 - 3 end
+        if backWall  then MzD._wallZ_back  = backWall.Position.Z  + backWall.Size.Z  / 2 + 3 end
     end
 
     function MzD.getCorridorZ()
@@ -82,45 +82,69 @@ function M.init(Modules)
         return homePos.Z >= 0 and MzD._wallZ_front or MzD._wallZ_back
     end
 
+    -- ============================================
+    -- NAVIGATIE
+    -- ============================================
+
+    -- Veilig pad via corridor: omhoog → corridor → langs X-as → naar doel
     function MzD.safePathTo(targetCFrame)
-        local ch  = Player.Character if not ch then return false end
-        local hrp = ch:FindFirstChild("HumanoidRootPart") if not hrp then return false end
-        local startPos = hrp.Position
-        local endPos   = targetCFrame.Position
-        local SAFE_Z   = MzD.getCorridorZ()
-        local SAFE_Y   = MzD._isGod and MzD.S.GodWalkY or (MzD.getHomePosition().Position.Y + 8)
-        MzD.fastTween(CFrame.new(startPos.X, SAFE_Y, startPos.Z))    twait(0.05)
-        MzD.corridorTween(CFrame.new(startPos.X, SAFE_Y, SAFE_Z))    twait(0.05)
-        MzD.corridorTween(CFrame.new(endPos.X, SAFE_Y, SAFE_Z))      twait(0.05)
-        MzD.corridorTween(CFrame.new(endPos.X, SAFE_Y, endPos.Z))    twait(0.05)
-        local finalCF = MzD._isGod and CFrame.new(endPos.X, MzD.S.GodWalkY, endPos.Z) or targetCFrame
-        MzD.tweenTo(finalCF) twait(0.05) return true
+        local character = Player.Character if not character then return false end
+        local rootPart  = character:FindFirstChild("HumanoidRootPart") if not rootPart then return false end
+        local startPos  = rootPart.Position
+        local endPos    = targetCFrame.Position
+        local safeZ     = MzD.getCorridorZ()
+        local safeY     = MzD._isGod
+            and MzD.S.GodWalkY
+            or  (MzD.getHomePosition().Position.Y + 8)
+
+        MzD.fastTween(CFrame.new(startPos.X, safeY, startPos.Z))  twait(0.05)
+        MzD.corridorTween(CFrame.new(startPos.X, safeY, safeZ))   twait(0.05)
+        MzD.corridorTween(CFrame.new(endPos.X,   safeY, safeZ))   twait(0.05)
+        MzD.corridorTween(CFrame.new(endPos.X,   safeY, endPos.Z)) twait(0.05)
+
+        local finalCF = MzD._isGod
+            and CFrame.new(endPos.X, MzD.S.GodWalkY, endPos.Z)
+            or  targetCFrame
+        MzD.tweenTo(finalCF)
+        twait(0.05)
+        return true
     end
 
+    -- Veilig terug naar base via corridor
     function MzD.safeReturnToBase()
-        local ch  = Player.Character if not ch then return end
-        local hrp = ch:FindFirstChild("HumanoidRootPart") if not hrp then return end
-        local curPos  = hrp.Position
-        local homePos = MzD.getHomePosition().Position
+        local character = Player.Character if not character then return end
+        local rootPart  = character:FindFirstChild("HumanoidRootPart") if not rootPart then return end
+        local currentPos = rootPart.Position
+        local homePos    = MzD.getHomePosition().Position
         MzD.detectWallZ()
-        local SAFE_Z = MzD.getCorridorZ()
-        local SAFE_Y = MzD._isGod and MzD.S.GodWalkY or (homePos.Y + 8)
-        MzD.fastTween(CFrame.new(curPos.X, SAFE_Y, curPos.Z))    twait(0.05)
-        MzD.corridorTween(CFrame.new(curPos.X, SAFE_Y, SAFE_Z))  twait(0.05)
-        MzD.corridorTween(CFrame.new(homePos.X, SAFE_Y, SAFE_Z)) twait(0.05)
-        MzD.corridorTween(CFrame.new(homePos.X, SAFE_Y, homePos.Z)) twait(0.05)
-        MzD.tweenTo(CFrame.new(homePos.X, MzD._isGod and MzD.S.GodWalkY or homePos.Y, homePos.Z)) twait(0.05)
+        local safeZ = MzD.getCorridorZ()
+        local safeY = MzD._isGod
+            and MzD.S.GodWalkY
+            or  (homePos.Y + 8)
+
+        MzD.fastTween(CFrame.new(currentPos.X, safeY, currentPos.Z))  twait(0.05)
+        MzD.corridorTween(CFrame.new(currentPos.X, safeY, safeZ))     twait(0.05)
+        MzD.corridorTween(CFrame.new(homePos.X,    safeY, safeZ))     twait(0.05)
+        MzD.corridorTween(CFrame.new(homePos.X,    safeY, homePos.Z)) twait(0.05)
+        MzD.tweenTo(CFrame.new(
+            homePos.X,
+            MzD._isGod and MzD.S.GodWalkY or homePos.Y,
+            homePos.Z
+        ))
+        twait(0.05)
     end
 
+    -- Directe terugkeer naar base (zonder corridor, voor normaal modus)
     function MzD.returnToBase()
         if MzD._isGod then
-            local hp = MzD.getHomePosition().Position
-            MzD.tweenTo(CFrame.new(hp.X, MzD.S.GodWalkY, hp.Z))
+            local homePos = MzD.getHomePosition().Position
+            MzD.tweenTo(CFrame.new(homePos.X, MzD.S.GodWalkY, homePos.Z))
         else
             MzD.tweenTo(MzD.getHomePosition())
         end
         twait(0.1)
     end
+
 end
 
 return M
