@@ -1,198 +1,93 @@
 -- ============================================
 -- [MODULE 10] GOD MODE
 -- ============================================
-
 local M = {}
 
 function M.init(Modules)
-    local G      = Modules.globals
-    local MzD    = G.MzD
-    local Player = G.Player
-    local tinsert = G.tinsert
-    local tspawn  = G.tspawn
-    local twait   = G.twait
-    local tcancel = G.tcancel
-    local tdefer  = G.tdefer
-    local sfind   = G.sfind
-    local slower  = G.slower
-    local mabs    = G.mabs
-    local mhuge   = G.mhuge
-    local mmin    = G.mmin
+    local G               = Modules.globals
+    local MzD             = G.MzD
+    local Player          = G.Player
+    local tinsert         = G.tinsert
+    local tspawn          = G.tspawn
+    local twait           = G.twait
+    local tcancel         = G.tcancel
+    local tdefer          = G.tdefer
+    local mabs            = G.mabs
+    local mhuge           = G.mhuge
+    local mmin            = G.mmin
     local isMzDPart       = Modules.utility.isMzDPart
     local getThemeColors  = Modules.wall_themes.getThemeColors
     local buildSurfaceGui = Modules.utility.buildSurfaceGui
 
-    local function godFindFloorParts()
-        local floors, map = {}, nil
-        for _, c in pairs(workspace:GetChildren()) do
-            if c:IsA("Model") and sfind(c.Name,"Map")
-               and not sfind(c.Name,"SharedInstances") and not sfind(c.Name,"VFX") then
-                if c:FindFirstChild("Spawners") or c:FindFirstChild("Gaps") or
-                   c:FindFirstChild("FirstFloor") or c:FindFirstChild("Ground") then
-                    map = c break
-                end
-                local hasFloor = false
-                for _, d in pairs(c:GetDescendants()) do
-                    if d:IsA("BasePart") then
-                        local n = slower(d.Name)
-                        if n == "firstfloor" or n == "ground" or n == "floor" then hasFloor = true break end
-                    end
-                end
-                if hasFloor then map = c break end
-            end
-        end
-        if not map then
-            for _, c in pairs(workspace:GetChildren()) do
-                if c:IsA("Model") and sfind(c.Name,"Map")
-                   and not sfind(c.Name,"SharedInstances") and not sfind(c.Name,"VFX") then
-                    local cnt = 0
-                    for _, d in pairs(c:GetDescendants()) do
-                        if d:IsA("BasePart") then cnt += 1 end
-                        if cnt > 10 then map = c break end
-                    end
-                    if map then break end
-                end
-            end
-        end
-        if map then
-            local seen = {}
-            for _, d in pairs(map:GetDescendants()) do
-                if d:IsA("BasePart") and not isMzDPart(d) and not seen[d] then
-                    local n = slower(d.Name)
-                    if n == "firstfloor" or n == "ground" or n == "floor"
-                       or n == "grass" or n == "path" or n == "road"
-                       or n == "platform" or n == "bridgefloor" then
-                        seen[d] = true tinsert(floors, d)
-                    elseif d.Size.X > 15 and d.Size.Z > 5 and d.Size.Y < 20
-                           and d.Position.Y > -10 and d.Position.Y < 30 then
-                        seen[d] = true tinsert(floors, d)
-                    end
-                end
-            end
-            local sp = map:FindFirstChild("Spawners")
-            if sp then
-                for _, s in pairs(sp:GetChildren()) do
-                    if s:IsA("BasePart") and not seen[s] and not isMzDPart(s)
-                       and s.Size.X > 15 and s.Size.Z > 5 and s.Size.Y < 20
-                       and s.Position.Y > -10 and s.Position.Y < 30 then
-                        seen[s] = true tinsert(floors, s)
-                    end
-                end
-            end
-        end
-        for _, c in pairs(workspace:GetChildren()) do
-            if sfind(c.Name,"SharedInstances") then
-                local fl = c:FindFirstChild("Floors")
-                if fl then
-                    for _, f in pairs(fl:GetChildren()) do
-                        if f:IsA("BasePart") and not isMzDPart(f)
-                           and f.Size.X > 15 and f.Size.Z > 5 and f.Size.Y < 20
-                           and f.Position.Y > -10 and f.Position.Y < 30 then
-                             tinsert(floors, f)
-                        end
-                    end
-                end
-                for _, f in pairs(c:GetChildren()) do
-                    if f:IsA("BasePart") and not isMzDPart(f)
-                       and f.Size.X > 15 and f.Size.Z > 5 and f.Size.Y < 20
-                       and f.Position.Y > -10 and f.Position.Y < 30 then
-                        tinsert(floors, f)
-                    end
-                end
-            end
-        end
+    -- ============================================
+    -- CONFIGURATIE
+    -- ============================================
+    local CONFIG = {
+        FLOOR_WIDTH          = 420,
+        FLOOR_THICKNESS      = 4,
+        CATCH_FLOOR_PADDING  = 200,
+        CATCH_FLOOR_OFFSET_Y = -15,
+        MAX_SEGMENT_LENGTH   = 2000,
+        STRUCTURE_OFFSET_Y   = 3.5,
+        FALL_MARGIN          = 30,
+        FLOOR_RECHECK_SECS   = 5,
+        LOOP_INTERVAL        = 0.5,
+    }
 
-        -- [NIEUWE FIX]: Zorgt dat Misc.Ground ook non-collidable wordt, zodat je valt!
-        local go = workspace:FindFirstChild("GameObjects")
-        if go then
-            local ps = go:FindFirstChild("PlaceSpecific", true)
-            if ps then
-                local root = ps:FindFirstChild("root")
-                if root then
-                    local misc = root:FindFirstChild("Misc")
-                    if misc then
-                        for _, d in pairs(misc:GetDescendants()) do
-                            if d:IsA("BasePart") then
-                                tinsert(floors, d)
-                            end
-                        end
-                    end
-                end
-            end
-        end
+    -- ============================================
+    -- HELPER
+    -- ============================================
 
-        return floors, map
+    local function findGameObjectsRoot()
+        local gameObjects = workspace:FindFirstChild("GameObjects")
+        if not gameObjects then return nil end
+        local placeSpecific = gameObjects:FindFirstChild("PlaceSpecific", true)
+        if not placeSpecific then return nil end
+        return placeSpecific:FindFirstChild("root")
     end
 
-    local function godDetectMapXRange(map)
-        local minX, maxX, found = mhuge, -mhuge, false
-        local function chk(p)
-            if not p:IsA("BasePart") or isMzDPart(p) then return end
-            if p.Size.Y > p.Size.X and p.Size.Y > p.Size.Z then return end
-            if p.Position.Y > 50 or p.Position.Y < -30 or p.Size.X < 5 then return end
-            local l = p.Position.X - p.Size.X/2
-            local r = p.Position.X + p.Size.X/2
-            if l < minX then minX = l end
-            if r > maxX then maxX = r end
-            found = true
-        end
-        if map then for _, d in pairs(map:GetDescendants()) do if d:IsA("BasePart") then chk(d) end end end
-        for _, c in pairs(workspace:GetChildren()) do
-            if sfind(c.Name,"SharedInstances") then
-                for _, f in pairs(c:GetChildren()) do if f:IsA("BasePart") then chk(f) end end
-                local fl = c:FindFirstChild("Floors")
-                if fl then for _, f in pairs(fl:GetChildren()) do chk(f) end end
-            end
-        end
-        if found and maxX > minX then return minX-20, maxX+20 end
-        return -50, 4500
+    -- ============================================
+    -- KILL PARTS
+    -- ============================================
+
+    local function disableKillPart(part)
+        tinsert(MzD._godKillParts, {
+            part         = part,
+            canCollide   = part.CanCollide,
+            canTouch     = part.CanTouch,
+            size         = part.Size,
+            position     = part.Position,
+            transparency = part.Transparency,
+        })
+        pcall(function()
+            part.CanCollide   = false
+            part.CanTouch     = false
+            part.Transparency = 1
+            part.Size         = Vector3.new(0, 0, 0)
+            part.Position     = Vector3.new(0, -9999, 0)
+        end)
     end
 
-    local function godFindAllKillParts()
-        local kills, seen = {}, {}
-        for _, c in pairs(workspace:GetDescendants()) do
-            if c:IsA("BasePart") and not seen[c] and not isMzDPart(c) then
-                local ok2, isKillStrip = pcall(function()
-                    return c.Size.Y < 1 and c.Size.Z > 50
-                       and c.Position.Y < 5 and c.Position.Y > -5 and c.Size.X < 5
-                end)
-                if ok2 and isKillStrip then seen[c] = true tinsert(kills, c) end
-                if not seen[c] then
-                    local n = slower(c.Name)
-                    if sfind(n,"kill") or sfind(n,"tsunamikill") or sfind(n,"deathzone")
-                       or sfind(n,"damagezone") or sfind(n,"killbrick") or sfind(n,"killpart") then
-                        seen[c] = true tinsert(kills, c)
-                    end
-                end
-            end
-        end
-        return kills
-    end
-
-    local function godDisableKillParts()
+    local function disableAllKillParts()
         MzD._godKillParts = {}
-        local kills = godFindAllKillParts()
-        for _, p in pairs(kills) do
-            tinsert(MzD._godKillParts, {
-                part = p, canCollide = p.CanCollide, canTouch = p.CanTouch,
-                size = p.Size, position = p.Position, transparency = p.Transparency,
-            })
-            pcall(function()
-                p.CanCollide = false p.CanTouch = false p.Transparency = 1
-                p.Size = Vector3.new(0,0,0) p.Position = Vector3.new(0,-9999,0)
-            end)
+        local seen        = {}
+        for _, part in ipairs(workspace:GetDescendants()) do
+            if part:IsA("BasePart") and not seen[part] and MzD.mapIsKillPart(part) then
+                seen[part] = true
+                disableKillPart(part)
+            end
         end
-        return #kills
+        return #MzD._godKillParts
     end
 
-    local function godRestoreKillParts()
-        for _, data in pairs(MzD._godKillParts) do
+    local function restoreKillParts()
+        for _, data in ipairs(MzD._godKillParts) do
             pcall(function()
                 if data.part and data.part.Parent then
-                    data.part.Size        = data.size
-                    data.part.Position    = data.position
-                    data.part.CanCollide  = data.canCollide
-                    data.part.CanTouch    = data.canTouch
+                    data.part.Size         = data.size
+                    data.part.Position     = data.position
+                    data.part.CanCollide   = data.canCollide
+                    data.part.CanTouch     = data.canTouch
                     data.part.Transparency = data.transparency
                 end
             end)
@@ -200,384 +95,496 @@ function M.init(Modules)
         MzD._godKillParts = {}
     end
 
-    local function godStartKillWatcher()
-        if MzD._godKillWatchThread then pcall(tcancel, MzD._godKillWatchThread) end
-        MzD._godKillWatchThread = tspawn(function()
-            while MzD._isGod do
+    local function reapplyKillPartDisable()
+        for _, data in ipairs(MzD._godKillParts) do
+            if data.part and data.part.Parent then
                 pcall(function()
-                    for _, data in pairs(MzD._godKillParts) do
-                        if data.part and data.part.Parent then
-                            data.part.CanCollide = false data.part.CanTouch = false
-                            data.part.Size = Vector3.new(0,0,0)
-                            data.part.Position = Vector3.new(0,-9999,0)
-                        end
-                    end
+                    data.part.CanCollide = false
+                    data.part.CanTouch   = false
+                    data.part.Size       = Vector3.new(0, 0, 0)
+                    data.part.Position   = Vector3.new(0, -9999, 0)
                 end)
-                pcall(function()
-                    for _, c in pairs(workspace:GetDescendants()) do
-                        if c:IsA("BasePart") and not isMzDPart(c) then
-                            local isKill = false
-                            pcall(function()
-                                if c.Size.Y < 1 and c.Size.Z > 50
-                                   and c.Position.Y < 5 and c.Position.Y > -5 and c.Size.X < 5 then
-                                    isKill = true
-                                end
-                            end)
-                            if not isKill then
-                                local n = slower(c.Name)
-                                if sfind(n,"kill") or sfind(n,"deathzone") or sfind(n,"damagezone") then
-                                    isKill = true
-                                end
-                            end
-                            if isKill then
-                                local already = false
-                                for _, data in pairs(MzD._godKillParts) do if data.part == c then already = true break end end
-                                if not already then
-                                    tinsert(MzD._godKillParts, {
-                                        part = c, canCollide = c.CanCollide, canTouch = c.CanTouch,
-                                        size = c.Size, position = c.Position, transparency = c.Transparency,
-                                    })
-                                    pcall(function()
-                                        c.CanCollide = false c.CanTouch = false c.Transparency = 1
-                                        c.Size = Vector3.new(0,0,0) c.Position = Vector3.new(0,-9999,0)
-                                    end)
-                                end
-                            end
-                        end
-                    end
-                end)
-                twait(3)
+            end
+        end
+    end
+
+    local function startKillPartWatcher()
+        if MzD._godKillWatchConn then
+            pcall(function() MzD._godKillWatchConn:Disconnect() end)
+        end
+        local knownParts = {}
+        for _, data in ipairs(MzD._godKillParts) do
+            knownParts[data.part] = true
+        end
+        MzD._godKillWatchConn = workspace.DescendantAdded:Connect(function(descendant)
+            if not MzD._isGod then return end
+            if not descendant:IsA("BasePart") then return end
+            if isMzDPart(descendant) or knownParts[descendant] then return end
+            if MzD.mapIsKillPart(descendant) then
+                knownParts[descendant] = true
+                disableKillPart(descendant)
             end
         end)
     end
 
-    local function godBuildEgaleVloer(map)
-        for _, p in pairs(MzD._godCreatedParts) do
-            pcall(function() if p and p.Parent then p:Destroy() end end)
+    local function stopKillPartWatcher()
+        if MzD._godKillWatchConn then
+            pcall(function() MzD._godKillWatchConn:Disconnect() end)
+            MzD._godKillWatchConn = nil
         end
-        MzD._godCreatedParts = {}
-        local startX, endX = godDetectMapXRange(map)
-        local floorY     = MzD.S.GodFloorY
-        local floorWidth = 420
-        local floorThick = 4
-        local theme      = getThemeColors(MzD)
-        local maxSeg     = 2000
-        local curX       = startX
-        local firstSeg   = true
-
-        while curX < endX do
-            local segLen  = mmin(maxSeg, endX - curX)
-            local centerX = curX + segLen/2
-            local floor   = Instance.new("Part")
-            floor.Name         = "MzDGodFloor"
-            floor.Size         = Vector3.new(segLen, floorThick, floorWidth)
-            floor.Position     = Vector3.new(centerX, floorY, 0)
-            floor.Anchored     = true floor.CanCollide = true
-            floor.Color        = theme.floor floor.Material = Enum.Material.SmoothPlastic
-            floor.Transparency = 0
-            floor.TopSurface   = Enum.SurfaceType.Smooth floor.BottomSurface = Enum.SurfaceType.Smooth
-            floor.Parent       = workspace
-            tinsert(MzD._godCreatedParts, floor)
-
-            if firstSeg then
-                firstSeg = false
-                buildSurfaceGui(floor, Enum.NormalId.Top, theme)
-            end
-
-            local topY = floorY + floorThick/2 + 0.1
-            for _, zPos in pairs({floorWidth/2-5, -floorWidth/2+5}) do
-                local s = Instance.new("Part")
-                s.Name = "MzDGodFloorStripe" s.Size = Vector3.new(segLen, 0.2, 2)
-                s.Position = Vector3.new(centerX, topY, zPos)
-                s.Anchored = true s.CanCollide = false
-                s.Color = theme.stripe s.Material = Enum.Material.Neon
-                s.Parent = workspace
-                tinsert(MzD._godCreatedParts, s)
-            end
-            local sm = Instance.new("Part")
-            sm.Name = "MzDGodFloorStripe" sm.Size = Vector3.new(segLen, 0.2, 1)
-            sm.Position = Vector3.new(centerX, topY, 0)
-            sm.Anchored = true sm.CanCollide = false
-            sm.Color = theme.stripe sm.Material = Enum.Material.Neon
-            sm.Parent = workspace
-            tinsert(MzD._godCreatedParts, sm)
-            curX = curX + segLen
-        end
-
-        local catch = Instance.new("Part")
-        catch.Name = "MzDGodCatchFloor"
-        catch.Size = Vector3.new(mabs(endX - startX) + 200, 2, floorWidth + 100)
-        catch.Position = Vector3.new((startX+endX)/2, floorY-15, 0)
-        catch.Anchored = true catch.CanCollide = true catch.Transparency = 1
-        catch.Parent = workspace
-        tinsert(MzD._godCreatedParts, catch)
-        return true
     end
 
-    local function godHideOriginalFloors()
-        local floors, map = godFindFloorParts()
+    -- ============================================
+    -- ORIGINELE VLOEREN
+    -- ============================================
+
+    local function hideOriginalFloors()
+        local map             = MzD.mapFindCurrentMap()
+        local sharedInstances = map and MzD.mapFindSharedInstances(map.Name) or nil
+        local floors          = MzD.mapFindFloorParts(map, sharedInstances)
         MzD._godOriginalFloors = {}
-        for _, p in pairs(floors) do
+
+        local function saveAndHide(part)
             tinsert(MzD._godOriginalFloors, {
-                part = p, size = p.Size, position = p.Position,
-                canCollide = p.CanCollide, transparency = p.Transparency,
-                color = p.Color, material = p.Material, anchored = p.Anchored,
+                part         = part,
+                size         = part.Size,
+                position     = part.Position,
+                canCollide   = part.CanCollide,
+                transparency = part.Transparency,
+                color        = part.Color,
+                material     = part.Material,
+                anchored     = part.Anchored,
             })
-            pcall(function() p.CanCollide = false p.Transparency = 1 end)
+            pcall(function() part.CanCollide = false part.Transparency = 1 end)
         end
+
+        for _, part in ipairs(floors) do saveAndHide(part) end
+
         if map then
-            for _, c in pairs(map:GetChildren()) do
-                if c:IsA("BasePart") and c.Name == "BridgeFloor" and not isMzDPart(c) then
-                    tinsert(MzD._godOriginalFloors, {
-                        part = c, size = c.Size, position = c.Position,
-                        canCollide = c.CanCollide, transparency = c.Transparency,
-                        color = c.Color, material = c.Material, anchored = c.Anchored,
-                    })
-                    pcall(function() c.CanCollide = false c.Transparency = 1 end)
+            for _, child in ipairs(map:GetChildren()) do
+                if child:IsA("BasePart") and child.Name == "BridgeFloor" and not isMzDPart(child) then
+                    saveAndHide(child)
                 end
             end
         end
+
+        local root = findGameObjectsRoot()
+        if root then
+            local misc = root:FindFirstChild("Misc")
+            if misc then
+                for _, desc in ipairs(misc:GetDescendants()) do
+                    if desc:IsA("BasePart") then saveAndHide(desc) end
+                end
+            end
+        end
+
         return map
     end
 
-    local function godRestoreFloors()
-        for _, data in pairs(MzD._godOriginalFloors) do
+    local function restoreOriginalFloors()
+        for _, data in ipairs(MzD._godOriginalFloors) do
             pcall(function()
                 if data.part and data.part.Parent then
-                    data.part.Size        = data.size
-                    data.part.Position    = data.position
-                    data.part.CanCollide  = data.canCollide
+                    data.part.Size         = data.size
+                    data.part.Position     = data.position
+                    data.part.CanCollide   = data.canCollide
                     data.part.Transparency = data.transparency
-                    data.part.Color       = data.color
-                    data.part.Material    = data.material
-                    data.part.Anchored    = data.anchored
+                    data.part.Color        = data.color
+                    data.part.Material     = data.material
+                    data.part.Anchored     = data.anchored
                 end
             end)
         end
         MzD._godOriginalFloors = {}
-        for _, f in pairs(MzD._godCreatedParts) do
-            pcall(function() if f and f.Parent then f:Destroy() end end)
+    end
+
+    -- ============================================
+    -- GOD VLOER
+    -- ============================================
+
+    local function buildGodFloor(map)
+        for _, part in ipairs(MzD._godCreatedParts) do
+            pcall(function() if part and part.Parent then part:Destroy() end end)
+        end
+        MzD._godCreatedParts = {}
+
+        local sharedInstances = map and MzD.mapFindSharedInstances(map.Name) or nil
+        local startX, endX    = MzD.mapDetectXRange(map, sharedInstances)
+        local floorY          = MzD.S.GodFloorY
+        local theme           = getThemeColors(MzD)
+        local isFirstSegment  = true
+        local currentX        = startX
+
+        while currentX < endX do
+            local segmentLength = mmin(CONFIG.MAX_SEGMENT_LENGTH, endX - currentX)
+            local centerX       = currentX + segmentLength / 2
+
+            local floor             = Instance.new("Part")
+            floor.Name              = "MzDGodFloor"
+            floor.Size              = Vector3.new(segmentLength, CONFIG.FLOOR_THICKNESS, CONFIG.FLOOR_WIDTH)
+            floor.Position          = Vector3.new(centerX, floorY, 0)
+            floor.Anchored          = true
+            floor.CanCollide        = true
+            floor.Color             = theme.floor
+            floor.Material          = Enum.Material.SmoothPlastic
+            floor.Transparency      = 0
+            floor.TopSurface        = Enum.SurfaceType.Smooth
+            floor.BottomSurface     = Enum.SurfaceType.Smooth
+            floor.Parent            = workspace
+            tinsert(MzD._godCreatedParts, floor)
+
+            if isFirstSegment then
+                isFirstSegment = false
+                buildSurfaceGui(floor, Enum.NormalId.Top, theme)
+            end
+
+            local topY = floorY + CONFIG.FLOOR_THICKNESS / 2 + 0.1
+            for _, zOffset in ipairs({ CONFIG.FLOOR_WIDTH / 2 - 5, -CONFIG.FLOOR_WIDTH / 2 + 5 }) do
+                local stripe         = Instance.new("Part")
+                stripe.Name          = "MzDGodFloorStripe"
+                stripe.Size          = Vector3.new(segmentLength, 0.2, 2)
+                stripe.Position      = Vector3.new(centerX, topY, zOffset)
+                stripe.Anchored      = true
+                stripe.CanCollide    = false
+                stripe.Color         = theme.stripe
+                stripe.Material      = Enum.Material.Neon
+                stripe.Parent        = workspace
+                tinsert(MzD._godCreatedParts, stripe)
+            end
+
+            local midStripe         = Instance.new("Part")
+            midStripe.Name          = "MzDGodFloorStripe"
+            midStripe.Size          = Vector3.new(segmentLength, 0.2, 1)
+            midStripe.Position      = Vector3.new(centerX, topY, 0)
+            midStripe.Anchored      = true
+            midStripe.CanCollide    = false
+            midStripe.Color         = theme.stripe
+            midStripe.Material      = Enum.Material.Neon
+            midStripe.Parent        = workspace
+            tinsert(MzD._godCreatedParts, midStripe)
+
+            currentX = currentX + segmentLength
+        end
+
+        local catchFloor        = Instance.new("Part")
+        catchFloor.Name         = "MzDGodCatchFloor"
+        catchFloor.Size         = Vector3.new(
+            mabs(endX - startX) + CONFIG.CATCH_FLOOR_PADDING,
+            2,
+            CONFIG.FLOOR_WIDTH + CONFIG.CATCH_FLOOR_PADDING
+        )
+        catchFloor.Position     = Vector3.new(
+            (startX + endX) / 2,
+            floorY + CONFIG.CATCH_FLOOR_OFFSET_Y,
+            0
+        )
+        catchFloor.Anchored     = true
+        catchFloor.CanCollide   = true
+        catchFloor.Transparency = 1
+        catchFloor.Parent       = workspace
+        tinsert(MzD._godCreatedParts, catchFloor)
+    end
+
+    local function destroyGodFloor()
+        for _, part in ipairs(MzD._godCreatedParts) do
+            pcall(function() if part and part.Parent then part:Destroy() end end)
         end
         MzD._godCreatedParts = {}
     end
 
-    -- ==========================================
-    -- NIEUW: Haalt specifieke objecten naar de God Vloer (+3.5 offset)
-    -- ==========================================
-    local function godLowerStructures()
+    -- ============================================
+    -- STRUCTUREN VERPLAATSEN
+    -- ============================================
+
+    local function lowerStructuresToGodFloor()
         MzD._godMovedParts = {}
-        local targetY = MzD.S.GodFloorY + 3.5
-        
-        local targets = {}
+        local targetY      = MzD.S.GodFloorY + CONFIG.STRUCTURE_OFFSET_Y
+        local root         = findGameObjectsRoot()
+        local objectsToMove = {}
+
         if workspace:FindFirstChild("Bases") then
-            for _, base in pairs(workspace.Bases:GetChildren()) do tinsert(targets, base) end
+            for _, base in ipairs(workspace.Bases:GetChildren()) do
+                tinsert(objectsToMove, base)
+            end
         end
-        tinsert(targets, workspace:FindFirstChild("DoomWheel"))
-        tinsert(targets, workspace:FindFirstChild("LimitedShop"))
-        
-        local go = workspace:FindFirstChild("GameObjects")
-        if go then
-            local ps = go:FindFirstChild("PlaceSpecific", true)
-            if ps then
-                local root = ps:FindFirstChild("root")
-                if root then
-                    tinsert(targets, root:FindFirstChild("UpgradeShop"))
-                    tinsert(targets, root:FindFirstChild("PlazaPortal"))
-                    tinsert(targets, root:FindFirstChild("SiteEventDetails"))
-                    local sm = root:FindFirstChild("SpawnMachines")
-                    if sm then tinsert(targets, sm:FindFirstChild("Default")) end
-                end
+        for _, name in ipairs({ "DoomWheel", "LimitedShop" }) do
+            local obj = workspace:FindFirstChild(name)
+            if obj then tinsert(objectsToMove, obj) end
+        end
+        if root then
+            for _, name in ipairs({ "UpgradeShop", "PlazaPortal", "SiteEventDetails" }) do
+                local obj = root:FindFirstChild(name)
+                if obj then tinsert(objectsToMove, obj) end
+            end
+            local spawnMachines = root:FindFirstChild("SpawnMachines")
+            if spawnMachines then
+                local default = spawnMachines:FindFirstChild("Default")
+                if default then tinsert(objectsToMove, default) end
             end
         end
 
-        for _, obj in pairs(targets) do
-            if obj then
-                local groundY = nil
-                for _, d in pairs(obj:GetDescendants()) do
-                    if d:IsA("BasePart") then
-                        local n = slower(d.Name)
-                        if n == "ground" or n == "floor" or sfind(n, "baseplate") then
-                            groundY = d.Position.Y
-                            break
-                        end
+        for _, obj in ipairs(objectsToMove) do
+            local groundY = nil
+            for _, desc in ipairs(obj:GetDescendants()) do
+                if desc:IsA("BasePart") then
+                    local name = string.lower(desc.Name)
+                    if name == "ground" or name == "floor" or string.find(name, "baseplate") then
+                        groundY = desc.Position.Y break
                     end
                 end
-                
-                if not groundY then
-                    local minY = mhuge
-                    for _, d in pairs(obj:GetDescendants()) do
-                        if d:IsA("BasePart") and d.Position.Y < minY then
-                            minY = d.Position.Y
-                        end
+            end
+            if not groundY then
+                local lowestY = mhuge
+                for _, desc in ipairs(obj:GetDescendants()) do
+                    if desc:IsA("BasePart") and desc.Position.Y < lowestY then
+                        lowestY = desc.Position.Y
                     end
-                    if minY ~= mhuge then groundY = minY end
                 end
-
-                if groundY then
-                    local deltaY = targetY - groundY
-                    for _, d in pairs(obj:GetDescendants()) do
-                        if d:IsA("BasePart") and not isMzDPart(d) then
-                            tinsert(MzD._godMovedParts, { part = d, origCF = d.CFrame })
-                            d.CFrame = d.CFrame + Vector3.new(0, deltaY, 0)
-                        end
+                if lowestY ~= mhuge then groundY = lowestY end
+            end
+            if groundY then
+                local deltaY = targetY - groundY
+                for _, desc in ipairs(obj:GetDescendants()) do
+                    if desc:IsA("BasePart") and not isMzDPart(desc) then
+                        tinsert(MzD._godMovedParts, { part = desc, originalCFrame = desc.CFrame })
+                        desc.CFrame = desc.CFrame + Vector3.new(0, deltaY, 0)
                     end
                 end
             end
         end
     end
 
-    local function godRestoreStructures()
-        if MzD._godMovedParts then
-            for _, data in pairs(MzD._godMovedParts) do
-                pcall(function()
-                    if data.part and data.part.Parent then
-                        data.part.CFrame = data.origCF
-                    end
-                end)
-            end
+    local function restoreStructures()
+        for _, data in ipairs(MzD._godMovedParts or {}) do
+            pcall(function()
+                if data.part and data.part.Parent then
+                    data.part.CFrame = data.originalCFrame
+                end
+            end)
         end
         MzD._godMovedParts = {}
     end
-    -- ==========================================
 
-    local function godTeleportUnder()
-        local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
-        local hum = Player.Character:FindFirstChild("Humanoid")
-        hrp.Velocity = Vector3.new(0,0,0)
-        hrp.CFrame   = CFrame.new(hrp.Position.X, MzD.S.GodWalkY, hrp.Position.Z)
-        if hum then
+    -- ============================================
+    -- TELEPORT
+    -- ============================================
+
+    local function teleportPlayerUnder()
+        local character = Player.Character
+        if not character then return end
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        local humanoid = character:FindFirstChild("Humanoid")
+        if not rootPart then return end
+        rootPart.Velocity = Vector3.new(0, 0, 0)
+        rootPart.CFrame   = CFrame.new(rootPart.Position.X, MzD.S.GodWalkY, rootPart.Position.Z)
+        if humanoid then
             pcall(function()
-                hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-                hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-                hum:SetStateEnabled(Enum.HumanoidStateType.Tripping, false)
-                hum:ChangeState(Enum.HumanoidStateType.Running)
-                hum.HipHeight = 0
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll,     false)
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Tripping,    false)
+                humanoid:ChangeState(Enum.HumanoidStateType.Running)
+                humanoid.HipHeight = 0
             end)
         end
     end
 
-    M.godTeleportUnder = godTeleportUnder
-    M.godBuildEgaleVloer = godBuildEgaleVloer
-    M.godDisableKillParts = godDisableKillParts
+    M.godTeleportUnder = teleportPlayerUnder
 
-    local function godStartLoop()
-        if MzD._godLoopThread then pcall(tcancel, MzD._godLoopThread) end
-        MzD._godLoopThread = tspawn(function()
-            while MzD._isGod do
-                pcall(function()
-                    local ch  = Player.Character if not ch then return end
-                    local hrp = ch:FindFirstChild("HumanoidRootPart")
-                    local hum = ch:FindFirstChild("Humanoid")
-                    if tick() - MzD._godFloorCacheTime > 5 then
-                        for _, data in pairs(MzD._godOriginalFloors) do
-                            if data.part and data.part.Parent then
-                                data.part.CanCollide  = false
-                                data.part.Transparency = 1
-                            end
-                        end
-                        MzD._godFloorCacheTime = tick()
-                    end
-                    if hum then
-                        pcall(function()
-                            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-                            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-                            hum:SetStateEnabled(Enum.HumanoidStateType.Tripping, false)
-                        end)
-                        pcall(function()
-                            local state = hum:GetState()
-                            if state == Enum.HumanoidStateType.FallingDown
-                            or state == Enum.HumanoidStateType.Ragdoll
-                            or state == Enum.HumanoidStateType.Tripping then
-                                hum:ChangeState(Enum.HumanoidStateType.Running)
-                            end
-                        end)
-                    end
-                    if hrp and hrp.Position.Y < MzD.S.GodWalkY - 30 then
-                        hrp.Velocity = Vector3.new(0,0,0)
-                        hrp.CFrame   = CFrame.new(hrp.Position.X, MzD.S.GodWalkY, hrp.Position.Z)
-                    end
-                end)
-                twait(0.5)
-            end
-        end)
-    end
+    -- ============================================
+    -- HEALTH
+    -- ============================================
 
-    local function godSetupHealth(char)
+    local function setupGodHealth(character)
         if MzD._godHealthConn then pcall(function() MzD._godHealthConn:Disconnect() end) end
-        if MzD._godDiedConn   then pcall(function() MzD._godDiedConn:Disconnect() end) end
-        local hum = char:WaitForChild("Humanoid", 5) if not hum then return end
+        if MzD._godDiedConn   then pcall(function() MzD._godDiedConn:Disconnect() end)   end
+
+        local humanoid = character:WaitForChild("Humanoid", 5)
+        if not humanoid then return end
+
+        MzD._godOriginalMaxHealth = humanoid.MaxHealth
+
         pcall(function()
-            hum.MaxHealth = mhuge hum.Health = mhuge
-            hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-            hum:SetStateEnabled(Enum.HumanoidStateType.Tripping, false)
-            hum.HipHeight = 0
+            humanoid.MaxHealth = mhuge
+            humanoid.Health    = mhuge
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead,        false)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll,     false)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Tripping,    false)
+            humanoid.HipHeight = 0
         end)
-        for _, ff in pairs(char:GetChildren()) do if ff:IsA("ForceField") then ff:Destroy() end end
-        local ff = Instance.new("ForceField") ff.Visible = false ff.Parent = char
-        MzD._godHealthConn = hum:GetPropertyChangedSignal("Health"):Connect(function()
+
+        for _, ff in ipairs(character:GetChildren()) do
+            if ff:IsA("ForceField") then ff:Destroy() end
+        end
+        local forceField   = Instance.new("ForceField")
+        forceField.Visible = false
+        forceField.Parent  = character
+
+        MzD._godHealthConn = humanoid:GetPropertyChangedSignal("Health"):Connect(function()
             if not MzD._isGod then return end
-            pcall(function() if hum.Health ~= mhuge then hum.Health = mhuge end end)
+            pcall(function()
+                if humanoid.Health ~= mhuge then humanoid.Health = mhuge end
+            end)
         end)
-        MzD._godDiedConn = hum.Died:Connect(function()
+
+        MzD._godDiedConn = humanoid.Died:Connect(function()
             if not MzD._isGod then return end
             tdefer(function()
                 pcall(function()
-                    hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-                    hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-                    hum.MaxHealth = mhuge hum.Health = mhuge
+                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+                    humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+                    humanoid.MaxHealth = mhuge
+                    humanoid.Health    = mhuge
                 end)
             end)
         end)
     end
-    M.godSetupHealth = godSetupHealth
+
+    M.godSetupHealth = setupGodHealth
+
+    -- ============================================
+    -- GOD LOOP
+    -- ============================================
+
+    local function startGodLoop()
+        if MzD._godLoopThread then pcall(tcancel, MzD._godLoopThread) end
+        local floorRecheckTimer = 0
+
+        MzD._godLoopThread = tspawn(function()
+            while MzD._isGod do
+                pcall(function()
+                    local character = Player.Character
+                    if not character then return end
+                    local rootPart = character:FindFirstChild("HumanoidRootPart")
+                    local humanoid = character:FindFirstChild("Humanoid")
+
+                    floorRecheckTimer += CONFIG.LOOP_INTERVAL
+                    if floorRecheckTimer >= CONFIG.FLOOR_RECHECK_SECS then
+                        floorRecheckTimer = 0
+                        for _, data in ipairs(MzD._godOriginalFloors) do
+                            if data.part and data.part.Parent then
+                                pcall(function()
+                                    data.part.CanCollide   = false
+                                    data.part.Transparency = 1
+                                end)
+                            end
+                        end
+                        reapplyKillPartDisable()
+                    end
+
+                    if humanoid then
+                        pcall(function()
+                            humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                            humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll,     false)
+                            humanoid:SetStateEnabled(Enum.HumanoidStateType.Tripping,    false)
+                            local state = humanoid:GetState()
+                            if state == Enum.HumanoidStateType.FallingDown
+                            or state == Enum.HumanoidStateType.Ragdoll
+                            or state == Enum.HumanoidStateType.Tripping then
+                                humanoid:ChangeState(Enum.HumanoidStateType.Running)
+                            end
+                        end)
+                    end
+
+                    if rootPart and rootPart.Position.Y < MzD.S.GodWalkY - CONFIG.FALL_MARGIN then
+                        rootPart.Velocity = Vector3.new(0, 0, 0)
+                        rootPart.CFrame   = CFrame.new(
+                            rootPart.Position.X, MzD.S.GodWalkY, rootPart.Position.Z
+                        )
+                    end
+                end)
+                twait(CONFIG.LOOP_INTERVAL)
+            end
+        end)
+    end
+
+    -- ============================================
+    -- ENABLE / DISABLE
+    -- ============================================
 
     function MzD.enableGod()
         if MzD._isGod then return end
-        MzD._isGod = true MzD.S.GodEnabled = true MzD._godFloorCacheTime = 0
-        local killCount = godDisableKillParts()
-        godStartKillWatcher()
+        MzD._isGod       = true
+        MzD.S.GodEnabled = true
+
+        local killCount = disableAllKillParts()
+        startKillPartWatcher()
         twait(0.1)
-        local map = godHideOriginalFloors()
+
+        local map = hideOriginalFloors()
         twait(0.1)
-        godLowerStructures() -- Haalt alles naar beneden, inclusief +3.5 offset!
+
+        lowerStructuresToGodFloor()
         twait(0.1)
-        godBuildEgaleVloer(map)
+
+        buildGodFloor(map)
         twait(0.2)
-        godStartLoop()
+
+        startGodLoop()
         twait(0.1)
-        godTeleportUnder()
+
+        teleportPlayerUnder()
         twait(0.1)
-        if Player.Character then godSetupHealth(Player.Character) end
-        MzD.Status.god = "Aan (Y="..MzD.S.GodWalkY.." K:"..killCount.." V:"..#MzD._godCreatedParts..")"
+
+        if Player.Character then setupGodHealth(Player.Character) end
+
+        MzD.Status.god = string.format(
+            "Aan (Y=%d K:%d V:%d)",
+            MzD.S.GodWalkY, killCount, #MzD._godCreatedParts
+        )
     end
 
     function MzD.disableGod()
-        MzD._isGod = false MzD.S.GodEnabled = false
-        if MzD._godLoopThread      then pcall(tcancel, MzD._godLoopThread)       MzD._godLoopThread = nil end
-        if MzD._godKillWatchThread then pcall(tcancel, MzD._godKillWatchThread)  MzD._godKillWatchThread = nil end
-        if MzD._godHealthConn      then pcall(function() MzD._godHealthConn:Disconnect() end) MzD._godHealthConn = nil end
-        if MzD._godDiedConn        then pcall(function() MzD._godDiedConn:Disconnect()   end) MzD._godDiedConn = nil end
-        godRestoreFloors()
-        godRestoreStructures()
-        godRestoreKillParts()
-        local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then hrp.Velocity = Vector3.new(0,0,0) hrp.CFrame = CFrame.new(hrp.Position.X, 10, hrp.Position.Z) end
-        local ch = Player.Character
-        if ch then
-            for _, ff2 in pairs(ch:GetChildren()) do if ff2:IsA("ForceField") then ff2:Destroy() end end
-            local hum = ch:FindFirstChild("Humanoid")
-            if hum then
+        MzD._isGod       = false
+        MzD.S.GodEnabled = false
+
+        if MzD._godLoopThread then
+            pcall(tcancel, MzD._godLoopThread)
+            MzD._godLoopThread = nil
+        end
+        stopKillPartWatcher()
+        if MzD._godHealthConn then
+            pcall(function() MzD._godHealthConn:Disconnect() end)
+            MzD._godHealthConn = nil
+        end
+        if MzD._godDiedConn then
+            pcall(function() MzD._godDiedConn:Disconnect() end)
+            MzD._godDiedConn = nil
+        end
+
+        restoreOriginalFloors()
+        restoreStructures()
+        restoreKillParts()
+        destroyGodFloor()
+
+        local character = Player.Character
+        local rootPart  = character and character:FindFirstChild("HumanoidRootPart")
+        if rootPart then
+            rootPart.Velocity = Vector3.new(0, 0, 0)
+            rootPart.CFrame   = CFrame.new(rootPart.Position.X, 10, rootPart.Position.Z)
+        end
+
+        if character then
+            for _, ff in ipairs(character:GetChildren()) do
+                if ff:IsA("ForceField") then ff:Destroy() end
+            end
+            local humanoid = character:FindFirstChild("Humanoid")
+            if humanoid then
                 pcall(function()
-                    hum.MaxHealth = 100 hum.Health = 100
-                    hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+                    local originalMaxHealth = MzD._godOriginalMaxHealth or 100
+                    humanoid.MaxHealth = originalMaxHealth
+                    humanoid.Health    = originalMaxHealth
+                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
                 end)
             end
         end
+
         MzD.Status.god = "Uit"
     end
+
+    M.godBuildEgaleVloer  = buildGodFloor
+    M.godDisableKillParts = disableAllKillParts
+
 end
 
 return M
