@@ -1,6 +1,6 @@
 -- ============================================
 -- [MAP UTILS] Gedeelde kaart-hulpfuncties
--- Gebruikt door: Module 25 (Map Fixer) en Module 10 (God Mode)
+-- Gebruikt door: Module 25 (Map Fixer), Module 10 (God Mode), Module 17 (Tower Trial)
 -- ============================================
 local M = {}
 
@@ -50,6 +50,22 @@ function M.init(Modules)
             if sfind(model.Name, skipWord) then return true end
         end
         return false
+    end
+
+    -- ============================================
+    -- GAMEOBJECTS ROOT
+    -- Gedeeld door god_mode EN tower_trial
+    -- ============================================
+
+    -- Geeft workspace.GameObjects.PlaceSpecific.root terug
+    -- Gebruikt door: god_mode (structuren verplaatsen, Misc.Ground)
+    --                tower_trial (Tower model vinden)
+    function MzD.mapGetGameObjectsRoot()
+        local gameObjects = workspace:FindFirstChild("GameObjects")
+        if not gameObjects then return nil end
+        local placeSpecific = gameObjects:FindFirstChild("PlaceSpecific", true)
+        if not placeSpecific then return nil end
+        return placeSpecific:FindFirstChild("root")
     end
 
     -- ============================================
