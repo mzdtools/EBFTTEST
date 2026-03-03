@@ -2,7 +2,9 @@
 -- MzD Hub v13.0 — Module Loader (Delta-Safe)
 -- Loadstring - loadstring(game:HttpGet("https://raw.githubusercontent.com/mzdtools/EBFTTEST/main/Tsunami"))()
 -- ============================================
+
 local BASE_URL = "https://raw.githubusercontent.com/mzdtools/EBFTTEST/main/modules/"
+
 local moduleNames = {
     "globals",
     "workspace_init",
@@ -13,6 +15,7 @@ local moduleNames = {
     "utility",
     "base_detection",
     "doom_collector",
+    "map_utils",        -- ← basis voor god_mode en map_fixer
     "god_mode",
     "movement",
     "rarity_filter",
@@ -36,53 +39,110 @@ local moduleNames = {
     "status_loop",
     "startup",
 }
+
 local Modules = {}
--- Phase 1: Load all module tables with retry logic
--- Delta sometimes has HttpGet delays/failures
+
+-- ============================================
+-- Phase 1: Laad alle modules met retry logica
+-- Delta kan soms vertraagd of foutief reageren
+-- ============================================
+
+local totalLoaded = 0
+local totalFailed = 0
+local loadStart   = tick()
+
 for _, name in ipairs(moduleNames) do
-    local url = BASE_URL .. name .. ".lua"
-    local result = nil
-    local loaded = false
+    local url        = BASE_URL .. name .. ".lua"
+    local result     = nil
+    local loaded     = false
+    local moduleStart = tick()
+
     for attempt = 1, 3 do
         local ok, res = pcall(function()
             local source = game:HttpGet(url)
-            if not source or source == "" or #source < 10 then
-                error("Empty response")
+
+            -- Lege of te korte response
+            if not source or source == "" or #source < 50 then
+                error("Lege of te korte response (" .. #(source or "") .. " bytes)")
             end
-            -- Delta fix: check for HTML error pages
+
+            -- Delta/GitHub geeft soms een HTML-foutpagina terug
             if source:sub(1, 1) == "<" then
-                error("Got HTML instead of Lua")
+                error("HTML ontvangen in plaats van Lua (waarschijnlijk 404)")
             end
-            return loadstring(source)()
+
+            -- Probeer te compileren vóór uitvoering
+            local fn, syntaxErr = loadstring(source)
+            if not fn then
+                error("Syntax-fout: " .. tostring(syntaxErr))
+            end
+
+            return fn()
         end)
+
         if ok and res then
             result = res
             loaded = true
             break
         else
-            warn("[MzD Hub] Attempt " .. attempt .. "/3 failed for: " .. name .. " — " .. tostring(res))
-            task.wait(1) -- wait before retry
+            warn(string.format(
+                "[MzD Hub] Poging %d/3 mislukt voor '%s' — %s",
+                attempt, name, tostring(res)
+            ))
+            if attempt < 3 then task.wait(1) end
         end
     end
+
     if loaded and result then
         Modules[name] = result
+        totalLoaded  += 1
+        print(string.format(
+            "[MzD Hub] ✓ %s geladen in %.2fs",
+            name, tick() - moduleStart
+        ))
     else
-        warn("[MzD Hub] FAILED to load module: " .. name)
+        totalFailed  += 1
         Modules[name] = { init = function() end }
+        warn(string.format(
+            "[MzD Hub] ✗ Module '%s' kon niet worden geladen — noodvervanging actief",
+            name
+        ))
     end
 end
--- Phase 2: Initialize modules in order
+
+-- ============================================
+-- Phase 2: Initialiseer modules in volgorde
+-- globals wordt apart behandeld (geen init nodig)
+-- ============================================
+
 for _, name in ipairs(moduleNames) do
     if name ~= "globals" then
         local mod = Modules[name]
         if mod and mod.init then
+            local initStart    = tick()
             local ok, err = pcall(function()
                 mod.init(Modules)
             end)
-            if not ok then
-                warn("[MzD Hub] Error initializing: " .. name .. " — " .. tostring(err))
+            if ok then
+                print(string.format(
+                    "[MzD Hub] ✓ %s geïnitialiseerd in %.2fs",
+                    name, tick() - initStart
+                ))
+            else
+                warn(string.format(
+                    "[MzD Hub] ✗ Fout bij initialiseren van '%s' — %s",
+                    name, tostring(err)
+                ))
             end
         end
     end
 end
-print("[MzD Hub] All modules loaded successfully.")
+
+-- ============================================
+-- Samenvatting
+-- ============================================
+
+print(string.format(
+    "[MzD Hub] Klaar in %.2fs — %d geladen, %d mislukt.",
+    tick() - loadStart, totalLoaded, totalFailed
+))
