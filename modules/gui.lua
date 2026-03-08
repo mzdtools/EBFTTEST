@@ -16,24 +16,35 @@ function M.init(Modules)
     local god_mod = Modules.god_mode
 
     -- ============================================
-    -- MOOI ICOON — puur Roblox UI, geen uploads
-    -- Verschijnt METEEN bij execute
+    -- SHOW/HIDE: togglet de Window Frame zelf,
+    -- niet de ScreenGui — dat werkt wel met Fluent
     -- ============================================
-    local _wVisible = true
-    local _mainGui  = nil
+    local _wVisible  = true
+    local _winFrame  = nil  -- de echte Fluent window Frame
 
     local function setWindowVisible(v)
         _wVisible = v
-        if _mainGui and _mainGui.Parent then
-            _mainGui.Enabled = v
+        if _winFrame and _winFrame.Parent then
+            _winFrame.Visible = v
             return
         end
+        -- Fallback: zoek de Frame op via de titel
         for _, gui in pairs(Player.PlayerGui:GetChildren()) do
             if gui:IsA("ScreenGui") and gui.Name ~= "MzDIconToggle" then
                 for _, d in pairs(gui:GetDescendants()) do
                     if d:IsA("TextLabel") and d.Text == "MzD Hub" then
-                        _mainGui = gui
-                        gui.Enabled = v
+                        -- Ga omhoog naar de root Frame van het venster
+                        local f = d
+                        while f and not f:IsA("ScreenGui") do
+                            if f:IsA("Frame") and f.Parent:IsA("ScreenGui") then
+                                _winFrame = f
+                                break
+                            end
+                            f = f.Parent
+                        end
+                        if _winFrame then
+                            _winFrame.Visible = v
+                        end
                         break
                     end
                 end
@@ -41,13 +52,15 @@ function M.init(Modules)
         end
     end
 
-    -- Verwijder oude icon gui
+    -- ============================================
+    -- ICOON — meteen zichtbaar, rechts van midden
+    -- Positie: X ~60% van scherm, Y bovenaan
+    -- ============================================
     pcall(function()
         local old = Player.PlayerGui:FindFirstChild("MzDIconToggle")
         if old then old:Destroy() end
     end)
 
-    -- ScreenGui
     local _iconGui = Instance.new("ScreenGui")
     _iconGui.Name           = "MzDIconToggle"
     _iconGui.ResetOnSpawn   = false
@@ -55,107 +68,101 @@ function M.init(Modules)
     _iconGui.IgnoreGuiInset = true
     _iconGui.Parent         = Player.PlayerGui
 
-    -- Buitenste gloed/schaduw ring
-    local _shadow = Instance.new("Frame")
-    _shadow.Name                 = "Shadow"
-    _shadow.Size                 = UDim2.fromOffset(68, 68)
-    _shadow.Position             = UDim2.fromOffset(8, 8)
-    _shadow.BackgroundColor3     = Color3.fromRGB(99, 102, 241)  -- indigo glow
-    _shadow.BackgroundTransparency = 0.6
-    _shadow.BorderSizePixel      = 0
-    _shadow.ZIndex               = 9
-    _shadow.Parent               = _iconGui
-    local _shadowCorner = Instance.new("UICorner")
-    _shadowCorner.CornerRadius = UDim.new(0.3, 0)
-    _shadowCorner.Parent = _shadow
+    -- Gebruik Scale zodat het altijd rechts van midden zit op elk scherm
+    local ICON_X = 0.62   -- 62% van schermbreedde = ruim rechts van midden
+    local ICON_Y = 0.02   -- 2% van schermhoogte = bovenaan
 
-    -- Hoofd knop frame
+    -- Glow schaduw
+    local _shadow = Instance.new("Frame")
+    _shadow.Name                    = "Shadow"
+    _shadow.Size                    = UDim2.new(0, 68, 0, 68)
+    _shadow.Position                = UDim2.new(ICON_X, -3, ICON_Y, -3)
+    _shadow.BackgroundColor3        = Color3.fromRGB(99, 102, 241)
+    _shadow.BackgroundTransparency  = 0.6
+    _shadow.BorderSizePixel         = 0
+    _shadow.ZIndex                  = 9
+    _shadow.Parent                  = _iconGui
+    Instance.new("UICorner", _shadow).CornerRadius = UDim.new(0.3, 0)
+
+    -- Hoofd frame
     local _iconFrame = Instance.new("Frame")
     _iconFrame.Name                 = "IconFrame"
-    _iconFrame.Size                 = UDim2.fromOffset(62, 62)
-    _iconFrame.Position             = UDim2.fromOffset(11, 11)
+    _iconFrame.Size                 = UDim2.new(0, 62, 0, 62)
+    _iconFrame.Position             = UDim2.new(ICON_X, 0, ICON_Y, 0)
     _iconFrame.BackgroundColor3     = Color3.fromRGB(15, 15, 20)
     _iconFrame.BorderSizePixel      = 0
     _iconFrame.ZIndex               = 10
     _iconFrame.Parent               = _iconGui
-    local _frameCorner = Instance.new("UICorner")
-    _frameCorner.CornerRadius = UDim.new(0.25, 0)
-    _frameCorner.Parent = _iconFrame
+    Instance.new("UICorner", _iconFrame).CornerRadius = UDim.new(0.25, 0)
 
-    -- Gradient op het frame
     local _gradient = Instance.new("UIGradient")
     _gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,   Color3.fromRGB(30, 27, 75)),   -- donker paars
-        ColorSequenceKeypoint.new(1,   Color3.fromRGB(10, 10, 18)),   -- bijna zwart
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 27, 75)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 10, 18)),
     })
     _gradient.Rotation = 135
     _gradient.Parent = _iconFrame
 
-    -- Border stroke
     local _stroke = Instance.new("UIStroke")
-    _stroke.Color       = Color3.fromRGB(99, 102, 241)  -- indigo border
-    _stroke.Thickness   = 1.5
+    _stroke.Color        = Color3.fromRGB(99, 102, 241)
+    _stroke.Thickness    = 1.5
     _stroke.Transparency = 0.3
-    _stroke.Parent      = _iconFrame
+    _stroke.Parent       = _iconFrame
 
-    -- "MzD" tekst bovenaan
+    -- "MzD" tekst
     local _labelMzD = Instance.new("TextLabel")
-    _labelMzD.Size                  = UDim2.new(1, 0, 0.55, 0)
-    _labelMzD.Position              = UDim2.fromOffset(0, 6)
+    _labelMzD.Size                   = UDim2.new(1, 0, 0.55, 0)
+    _labelMzD.Position               = UDim2.fromOffset(0, 6)
     _labelMzD.BackgroundTransparency = 1
-    _labelMzD.Text                  = "MzD"
-    _labelMzD.TextColor3            = Color3.fromRGB(255, 255, 255)
-    _labelMzD.Font                  = Enum.Font.GothamBold
-    _labelMzD.TextSize              = 17
-    _labelMzD.ZIndex                = 11
-    _labelMzD.Parent                = _iconFrame
-
-    -- Gradient op de tekst
-    local _textGradient = Instance.new("UIGradient")
-    _textGradient.Color = ColorSequence.new({
+    _labelMzD.Text                   = "MzD"
+    _labelMzD.TextColor3             = Color3.fromRGB(255, 255, 255)
+    _labelMzD.Font                   = Enum.Font.GothamBold
+    _labelMzD.TextSize               = 17
+    _labelMzD.ZIndex                 = 11
+    _labelMzD.Parent                 = _iconFrame
+    local _tg = Instance.new("UIGradient")
+    _tg.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(165, 180, 252)), -- licht indigo
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(165, 180, 252)),
     })
-    _textGradient.Rotation = 90
-    _textGradient.Parent = _labelMzD
+    _tg.Rotation = 90
+    _tg.Parent = _labelMzD
 
-    -- "Hub" tekst onderaan (kleiner, paars)
+    -- "Hub" tekst
     local _labelHub = Instance.new("TextLabel")
-    _labelHub.Size                  = UDim2.new(1, 0, 0.35, 0)
-    _labelHub.Position              = UDim2.new(0, 0, 0.6, 0)
+    _labelHub.Size                   = UDim2.new(1, 0, 0.35, 0)
+    _labelHub.Position               = UDim2.new(0, 0, 0.6, 0)
     _labelHub.BackgroundTransparency = 1
-    _labelHub.Text                  = "Hub"
-    _labelHub.TextColor3            = Color3.fromRGB(129, 140, 248) -- indigo-400
-    _labelHub.Font                  = Enum.Font.Gotham
-    _labelHub.TextSize              = 11
-    _labelHub.ZIndex                = 11
-    _labelHub.Parent                = _iconFrame
+    _labelHub.Text                   = "Hub"
+    _labelHub.TextColor3             = Color3.fromRGB(129, 140, 248)
+    _labelHub.Font                   = Enum.Font.Gotham
+    _labelHub.TextSize               = 11
+    _labelHub.ZIndex                 = 11
+    _labelHub.Parent                 = _iconFrame
 
-    -- Klikbare transparante knop over alles heen
+    -- Klikbaar transparant knopje over alles
     local _iconBtn = Instance.new("TextButton")
-    _iconBtn.Size                   = UDim2.fromOffset(62, 62)
-    _iconBtn.Position               = UDim2.fromOffset(11, 11)
+    _iconBtn.Size                   = UDim2.new(0, 62, 0, 62)
+    _iconBtn.Position               = UDim2.new(ICON_X, 0, ICON_Y, 0)
     _iconBtn.BackgroundTransparency = 1
     _iconBtn.Text                   = ""
     _iconBtn.ZIndex                 = 12
     _iconBtn.Parent                 = _iconGui
-    local _btnCorner = Instance.new("UICorner")
-    _btnCorner.CornerRadius = UDim.new(0.25, 0)
-    _btnCorner.Parent = _iconBtn
+    Instance.new("UICorner", _iconBtn).CornerRadius = UDim.new(0.25, 0)
 
-    -- Hover effect
+    -- Hover
     _iconBtn.MouseEnter:Connect(function()
         _stroke.Transparency = 0
-        _stroke.Thickness = 2
+        _stroke.Thickness    = 2
         _shadow.BackgroundTransparency = 0.4
     end)
     _iconBtn.MouseLeave:Connect(function()
         _stroke.Transparency = 0.3
-        _stroke.Thickness = 1.5
+        _stroke.Thickness    = 1.5
         _shadow.BackgroundTransparency = 0.6
     end)
 
-    -- Drag logic (sleep zowel frame als shadow mee)
+    -- Drag logic
     local _dragging  = false
     local _dragStart = nil
     local _startPos  = nil
@@ -164,7 +171,7 @@ function M.init(Modules)
     local function moveAll(pos)
         _iconFrame.Position = pos
         _iconBtn.Position   = pos
-        _shadow.Position    = UDim2.fromOffset(pos.X.Offset - 3, pos.Y.Offset - 3)
+        _shadow.Position    = UDim2.new(pos.X.Scale, pos.X.Offset - 3, pos.Y.Scale, pos.Y.Offset - 3)
     end
 
     _iconBtn.InputBegan:Connect(function(input)
@@ -186,9 +193,9 @@ function M.init(Modules)
             if math.abs(delta.X) > 4 or math.abs(delta.Y) > 4 then
                 _dragMoved = true
             end
-            moveAll(UDim2.fromOffset(
-                _startPos.X.Offset + delta.X,
-                _startPos.Y.Offset + delta.Y
+            moveAll(UDim2.new(
+                _startPos.X.Scale, _startPos.X.Offset + delta.X,
+                _startPos.Y.Scale, _startPos.Y.Offset + delta.Y
             ))
         end
     end)
@@ -200,7 +207,7 @@ function M.init(Modules)
         end
     end)
 
-    -- Klik = venster tonen
+    -- Klik = venster maximaliseren
     _iconBtn.MouseButton1Click:Connect(function()
         if _dragMoved then return end
         if not _wVisible then
@@ -248,6 +255,7 @@ function M.init(Modules)
     local GODWALKY  = {"5","3","1","0","-1","-2","-3","-5","-8","-10","-15"}
     local GODFLOORY = {"15","12","10","8","5","3","0","-3","-5","-8","-10","-15","-20"}
 
+    -- Geen MinimizeKey — wij regelen dat zelf
     local W = Fluent:CreateWindow({
         Title    = "MzD Hub",
         SubTitle = "v13.0 Clean",
@@ -258,27 +266,48 @@ function M.init(Modules)
     })
 
     -- ============================================
-    -- INTERCEPT FLUENT'S SLUITKNOP NA 1s
+    -- NA LADEN: _winFrame cachen + Ctrl hint + X knop fixen
     -- ============================================
     task.spawn(function()
         twait(1)
         pcall(function()
-            local TARGET_NAMES = {
-                "close","closebutton","exit","x",
-                "closewindow","close_button","btnclose",
-            }
             for _, gui in pairs(Player.PlayerGui:GetChildren()) do
                 if gui:IsA("ScreenGui") and gui.Name ~= "MzDIconToggle" then
                     for _, d in pairs(gui:GetDescendants()) do
                         if d:IsA("TextLabel") and d.Text == "MzD Hub" then
-                            _mainGui = gui
 
+                            -- Cache de root window Frame
+                            local f = d
+                            while f and not f:IsA("ScreenGui") do
+                                if f:IsA("Frame") and f.Parent:IsA("ScreenGui") then
+                                    _winFrame = f
+                                    break
+                                end
+                                f = f.Parent
+                            end
+
+                            -- Verberg alle keybind hint labels (Ctrl / RightControl tekst)
+                            for _, lbl in pairs(gui:GetDescendants()) do
+                                if lbl:IsA("TextLabel") then
+                                    local t = lbl.Text:lower()
+                                    if t:find("ctrl") or t:find("control") or t:find("minimize") or t:find("keybind") then
+                                        lbl.Visible = false
+                                    end
+                                end
+                            end
+
+                            -- Debug: print alle knoppen
                             for _, btn in pairs(gui:GetDescendants()) do
                                 if btn:IsA("ImageButton") or btn:IsA("TextButton") then
                                     warn("[MzD] Knop: '" .. btn.Name .. "' | Parent: '" .. btn.Parent.Name .. "'")
                                 end
                             end
 
+                            -- Vervang de X sluitknop
+                            local TARGET_NAMES = {
+                                "close","closebutton","exit","x",
+                                "closewindow","close_button","btnclose",
+                            }
                             for _, btn in pairs(gui:GetDescendants()) do
                                 if (btn:IsA("ImageButton") or btn:IsA("TextButton"))
                                 and not btn:FindFirstChild("_mzdReplaced") then
