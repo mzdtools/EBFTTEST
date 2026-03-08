@@ -59,8 +59,86 @@ function M.init(Modules)
         Size        = UDim2.fromOffset(640, 540),
         Acrylic     = true,
         Theme       = "Dark",
-        MinimizeKey = Enum.KeyCode.RightControl
     })
+
+    -- ============================================
+    -- DRAGGABLE FLOATING ICON TOGGLE (MuMu safe)
+    -- ============================================
+    local _iconGui = Instance.new("ScreenGui")
+    _iconGui.Name             = "MzDIconToggle"
+    _iconGui.ResetOnSpawn     = false
+    _iconGui.DisplayOrder     = 999
+    _iconGui.IgnoreGuiInset   = true
+    _iconGui.Parent           = Player.PlayerGui
+
+    local _iconBtn = Instance.new("ImageButton")
+    _iconBtn.Size                   = UDim2.fromOffset(54, 54)
+    _iconBtn.Position               = UDim2.fromOffset(12, 12)
+    _iconBtn.BackgroundTransparency = 1
+    _iconBtn.Image                  = "https://i.postimg.cc/CLwZNYm6/mzd.png"
+    _iconBtn.ZIndex                 = 10
+    _iconBtn.Parent                 = _iconGui
+
+    -- Rounded corners on the icon
+    local _corner = Instance.new("UICorner")
+    _corner.CornerRadius = UDim.new(0.2, 0)
+    _corner.Parent       = _iconBtn
+
+    -- Drag logic
+    local _dragging   = false
+    local _dragStart  = nil
+    local _startPos   = nil
+    local _dragMoved  = false
+
+    _iconBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            _dragging  = true
+            _dragMoved = false
+            _dragStart = input.Position
+            _startPos  = _iconBtn.Position
+        end
+    end)
+
+    _iconBtn.InputChanged:Connect(function(input)
+        if _dragging and (
+            input.UserInputType == Enum.UserInputType.MouseMovement or
+            input.UserInputType == Enum.UserInputType.Touch
+        ) then
+            local delta = input.Position - _dragStart
+            if math.abs(delta.X) > 4 or math.abs(delta.Y) > 4 then
+                _dragMoved = true
+            end
+            _iconBtn.Position = UDim2.fromOffset(
+                _startPos.X.Offset + delta.X,
+                _startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    _iconBtn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            _dragging = false
+        end
+    end)
+
+    -- Toggle GUI visibility on click (only if not dragged)
+    local _wVisible = true
+    _iconBtn.MouseButton1Click:Connect(function()
+        if _dragMoved then return end
+        _wVisible = not _wVisible
+        for _, gui in pairs(Player.PlayerGui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Name ~= "MzDIconToggle" then
+                for _, d in pairs(gui:GetDescendants()) do
+                    if d:IsA("TextLabel") and d.Text == "MzD Hub" then
+                        gui.Enabled = _wVisible
+                        break
+                    end
+                end
+            end
+        end
+    end)
 
     -- Onzichtbare dummy objecten om te voorkomen dat status_loop.lua crasht
     local dP = { SetTitle = function() end, SetDesc = function() end }
