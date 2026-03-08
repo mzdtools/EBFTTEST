@@ -14,13 +14,11 @@ function M.init(Modules)
     local sformat = G.sformat
     local mfloor  = G.mfloor
     local god_mod = Modules.god_mode
-    local UIS     = game:GetService("UserInputService")
 
     twait(0.5)
     pcall(function()
         for _, gui in pairs(Player.PlayerGui:GetChildren()) do
             if gui:IsA("ScreenGui") then
-                if gui.Name == "MzDHubToggle" then gui:Destroy() end
                 for _, d in pairs(gui:GetDescendants()) do
                     if d:IsA("TextLabel") and d.Text == "MzD Hub" then gui:Destroy() break end
                 end
@@ -54,164 +52,113 @@ function M.init(Modules)
     local GODWALKY  = {"5","3","1","0","-1","-2","-3","-5","-8","-10","-15"}
     local GODFLOORY = {"15","12","10","8","5","3","0","-3","-5","-8","-10","-15","-20"}
 
-    -- MinimizeKey op iets onbruikbaars zodat het niet in de weg zit
     local W = Fluent:CreateWindow({
         Title       = "MzD Hub",
         SubTitle    = "v13.0 Clean",
         TabWidth    = 160,
         Size        = UDim2.fromOffset(640, 540),
         Acrylic     = true,
-        Theme       = "Dark",
-        MinimizeKey = Enum.KeyCode.Unknown
+        Theme       = "Dark"
+        -- MinimizeKey is hier bewust verwijderd voor MuMu Player
     })
 
-    -- ==========================================
-    -- ZOEK DE FLUENT SCREENGUI
-    -- ==========================================
-    twait(0.5)
-    local fluentGui = nil
-    pcall(function()
+    -- ============================================
+    -- DRAGGABLE ICON & HIDE LOGIC (MuMu Safe)
+    -- ============================================
+    local _wVisible = true
+    local _mainGui = nil
+
+    local function setWindowVisible(v)
+        _wVisible = v
+        if _mainGui then _mainGui.Enabled = v return end
         for _, gui in pairs(Player.PlayerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Name ~= "MzDHubToggle" then
+            if gui:IsA("ScreenGui") and gui.Name ~= "MzDIconToggle" then
                 for _, d in pairs(gui:GetDescendants()) do
                     if d:IsA("TextLabel") and d.Text == "MzD Hub" then
-                        fluentGui = gui
+                        _mainGui = gui
+                        gui.Enabled = v
                         break
                     end
                 end
             end
-            if fluentGui then break end
-        end
-    end)
-
-    -- ==========================================
-    -- DRAGGABLE TOGGLE ICON
-    -- ==========================================
-    local toggleGui = Instance.new("ScreenGui")
-    toggleGui.Name = "MzDHubToggle"
-    toggleGui.ResetOnSpawn = false
-    toggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    toggleGui.DisplayOrder = 999999
-    toggleGui.Parent = Player.PlayerGui
-
-    local toggleBtn = Instance.new("TextButton")
-    toggleBtn.Name = "MzDIcon"
-    toggleBtn.Size = UDim2.fromOffset(48, 48)
-    toggleBtn.Position = UDim2.new(0, 12, 0.5, -24)
-    toggleBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
-    toggleBtn.BackgroundTransparency = 0.1
-    toggleBtn.Text = "MzD"
-    toggleBtn.TextColor3 = Color3.fromRGB(180, 140, 255)
-    toggleBtn.Font = Enum.Font.GothamBold
-    toggleBtn.TextSize = 13
-    toggleBtn.AutoButtonColor = false
-    toggleBtn.BorderSizePixel = 0
-    toggleBtn.ZIndex = 999
-    toggleBtn.Parent = toggleGui
-
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(1, 0)
-    btnCorner.Parent = toggleBtn
-
-    local btnStroke = Instance.new("UIStroke")
-    btnStroke.Color = Color3.fromRGB(120, 80, 220)
-    btnStroke.Thickness = 2
-    btnStroke.Transparency = 0.2
-    btnStroke.Parent = toggleBtn
-
-    -- Glow/shadow ring
-    local shadow = Instance.new("Frame")
-    shadow.Name = "Shadow"
-    shadow.Size = UDim2.fromOffset(56, 56)
-    shadow.Position = UDim2.fromScale(0.5, 0.5)
-    shadow.AnchorPoint = Vector2.new(0.5, 0.5)
-    shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    shadow.BackgroundTransparency = 0.7
-    shadow.BorderSizePixel = 0
-    shadow.ZIndex = 998
-    shadow.Parent = toggleBtn
-    local shadowCorner = Instance.new("UICorner")
-    shadowCorner.CornerRadius = UDim.new(1, 0)
-    shadowCorner.Parent = shadow
-
-    -- Track GUI visibility
-    local guiVisible = true
-
-    local function updateIconLook()
-        if guiVisible then
-            toggleBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
-            btnStroke.Color = Color3.fromRGB(120, 80, 220)
-            toggleBtn.TextColor3 = Color3.fromRGB(180, 140, 255)
-        else
-            toggleBtn.BackgroundColor3 = Color3.fromRGB(55, 20, 20)
-            btnStroke.Color = Color3.fromRGB(200, 60, 60)
-            toggleBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
         end
     end
 
-    local function toggleWindow()
-        -- Probeer Fluent GUI opnieuw te vinden als het nil is
-        if not fluentGui then
-            pcall(function()
-                for _, gui in pairs(Player.PlayerGui:GetChildren()) do
-                    if gui:IsA("ScreenGui") and gui.Name ~= "MzDHubToggle" then
-                        for _, d in pairs(gui:GetDescendants()) do
-                            if d:IsA("TextLabel") and d.Text == "MzD Hub" then
-                                fluentGui = gui
-                                break
+    local _iconGui = Instance.new("ScreenGui")
+    _iconGui.Name = "MzDIconToggle"
+    _iconGui.ResetOnSpawn = false
+    _iconGui.DisplayOrder = 999
+    _iconGui.Parent = Player.PlayerGui
+
+    local _iconBtn = Instance.new("ImageButton")
+    _iconBtn.Size = UDim2.fromOffset(54, 54)
+    _iconBtn.Position = UDim2.fromOffset(12, 12)
+    _iconBtn.BackgroundTransparency = 1
+    _iconBtn.Image = "https://i.postimg.cc/CLwZNYm6/mzd.png"
+    _iconBtn.ZIndex = 10
+    _iconBtn.Parent = _iconGui
+
+    local _corner = Instance.new("UICorner")
+    _corner.CornerRadius = UDim.new(0.2, 0)
+    _corner.Parent = _iconBtn
+
+    local _dragging, _dragStart, _startPos, _dragMoved = false, nil, nil, false
+
+    _iconBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            _dragging = true
+            _dragMoved = false
+            _dragStart = input.Position
+            _startPos = _iconBtn.Position
+        end
+    end)
+
+    _iconBtn.InputChanged:Connect(function(input)
+        if _dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - _dragStart
+            if math.abs(delta.X) > 4 or math.abs(delta.Y) > 4 then _dragMoved = true end
+            _iconBtn.Position = UDim2.fromOffset(_startPos.X.Offset + delta.X, _startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    _iconBtn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            _dragging = false
+        end
+    end)
+
+    _iconBtn.MouseButton1Click:Connect(function()
+        if not _dragMoved and not _wVisible then setWindowVisible(true) end
+    end)
+
+    twait(0.2)
+    pcall(function()
+        for _, gui in pairs(Player.PlayerGui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Name ~= "MzDIconToggle" then
+                for _, d in pairs(gui:GetDescendants()) do
+                    if d:IsA("TextLabel") and d.Text == "MzD Hub" then
+                        _mainGui = gui
+                        for _, btn in pairs(gui:GetDescendants()) do
+                            if btn:IsA("ImageButton") or btn:IsA("TextButton") then
+                                local n = btn.Name:lower()
+                                if n == "close" or n == "closebutton" or n == "exit" or n == "x" then
+                                    local blocker = Instance.new("TextButton")
+                                    blocker.Size = UDim2.fromScale(1, 1)
+                                    blocker.BackgroundTransparency = 1
+                                    blocker.Text = ""
+                                    blocker.ZIndex = btn.ZIndex + 10
+                                    blocker.Parent = btn
+                                    blocker.MouseButton1Click:Connect(function() setWindowVisible(false) end)
+                                end
                             end
                         end
+                        break
                     end
-                    if fluentGui then break end
                 end
-            end)
-        end
-
-        if fluentGui then
-            guiVisible = not guiVisible
-            fluentGui.Enabled = guiVisible
-            updateIconLook()
-        end
-    end
-
-    -- Drag logic
-    local dragging  = false
-    local dragStart = Vector3.new()
-    local startPos  = UDim2.new()
-    local dragDelta = 0
-
-    toggleBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-            dragging  = true
-            dragStart = input.Position
-            startPos  = toggleBtn.Position
-            dragDelta = 0
-        end
-    end)
-
-    UIS.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStart
-            dragDelta = delta.Magnitude
-            toggleBtn.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-            )
-        end
-    end)
-
-    UIS.InputEnded:Connect(function(input)
-        if (input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch) and dragging then
-            dragging = false
-            -- Alleen toggle als je NIET gesleept hebt (klik/tap)
-            if dragDelta < 6 then
-                toggleWindow()
             end
         end
     end)
+    -- ============================================
 
     -- Onzichtbare dummy objecten om te voorkomen dat status_loop.lua crasht
     local dP = { SetTitle = function() end, SetDesc = function() end }
@@ -219,8 +166,8 @@ function M.init(Modules)
 
     -- ========== FARM TAB ==========
     local FT  = W:AddTab({Title = "Farm", Icon = "leaf"})
-
-    -- Tower Trial Farm
+    
+    -- Tower Trial Farm (Bovenaan)
     local TTTG = FT:AddToggle("TowerTrialToggle", {Title = "🏆 Auto Tower Trial Farm", Default = false})
     TTTG:OnChanged(function(v)
         if v then
@@ -269,7 +216,7 @@ function M.init(Modules)
 
     -- ========== FACTORY TAB ==========
     local FCT = W:AddTab({Title = "Factory", Icon = "factory"})
-
+    
     local FCTG = FCT:AddToggle("FactoryToggle", {Title = "🏭 Start Factory", Default = false})
     FCTG:OnChanged(function(v)
         if v then MzD.findBase() MzD.startFactoryLoop() else MzD.stopFactoryLoop() end
@@ -308,7 +255,7 @@ function M.init(Modules)
 
     local GDTG = AT2:AddToggle("GodToggle", {Title = "😇 God Mode", Default = false})
     GDTG:OnChanged(function(v) if v then MzD.enableGod() else MzD.disableGod() end end)
-
+    
     AT2:AddDropdown("GodWalkY",  {Title = "🚶 Loop Y Offset",  Values = GODWALKY,  Default = "0",   Multi = false}):OnChanged(function(v)
         MzD.S.GodWalkY = tonumber(v) or 0
         if MzD._isGod then god_mod.godTeleportUnder() end
@@ -330,7 +277,7 @@ function M.init(Modules)
     AT2:AddToggle("InstantToggle", {Title = "⚡ Instant Pickup", Default = true}):OnChanged(function(v)
         MzD.S.InstantPickup = v if v then MzD.setupInstant() end
     end)
-
+    
     local AFKTG = AT2:AddToggle("AFKToggle", {Title = "🕐 Anti-AFK", Default = true})
     AFKTG:OnChanged(function(v) if v then MzD.startAFK() else MzD.stopAFK() end end)
 
