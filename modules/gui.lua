@@ -170,7 +170,6 @@ function M.init(Modules)
         pcall(function() toggleGui.Parent = game:GetService("CoreGui") end)
     end
 
-    -- Container (wordt gesleept)
     local container = Instance.new("Frame")
     container.Name               = "MzDContainer"
     container.Size               = UDim2.fromOffset(64, 64)
@@ -181,7 +180,6 @@ function M.init(Modules)
     container.ZIndex             = 995
     container.Parent             = toggleGui
 
-    -- Hoofd knop — donker met blauwe gradient
     local btn = Instance.new("TextButton")
     btn.Name             = "MzDBtn"
     btn.Size             = UDim2.fromScale(1, 1)
@@ -194,7 +192,6 @@ function M.init(Modules)
     btn.Parent           = container
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0.18, 0)
 
-    -- Gradient achtergrond
     local btnGrad = Instance.new("UIGradient")
     btnGrad.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0,   Color3.fromRGB(14, 20, 40)),
@@ -204,14 +201,12 @@ function M.init(Modules)
     btnGrad.Rotation = 145
     btnGrad.Parent   = btn
 
-    -- Neon cyan border
     local btnStroke = Instance.new("UIStroke")
     btnStroke.Color        = Color3.fromRGB(0, 220, 255)
     btnStroke.Thickness    = 1.5
     btnStroke.Transparency = 0.15
     btnStroke.Parent       = btn
 
-    -- Accent streepje bovenaan
     local accentLine = Instance.new("Frame")
     accentLine.Size                   = UDim2.new(0.6, 0, 0, 2)
     accentLine.Position               = UDim2.new(0.2, 0, 0, 0)
@@ -229,7 +224,6 @@ function M.init(Modules)
     accentGrad.Rotation = 0
     accentGrad.Parent   = accentLine
 
-    -- "MzD" tekst
     local label = Instance.new("TextLabel")
     label.Size                   = UDim2.new(1, 0, 0.52, 0)
     label.Position               = UDim2.new(0, 0, 0.08, 0)
@@ -241,7 +235,6 @@ function M.init(Modules)
     label.ZIndex                 = 1000
     label.Parent                 = btn
 
-    -- "HUB" tekst
     local labelHub = Instance.new("TextLabel")
     labelHub.Size                   = UDim2.new(1, 0, 0.28, 0)
     labelHub.Position               = UDim2.new(0, 0, 0.62, 0)
@@ -253,7 +246,6 @@ function M.init(Modules)
     labelHub.ZIndex                 = 1000
     labelHub.Parent                 = btn
 
-    -- Status dot (groen = open, rood = dicht)
     local dot = Instance.new("Frame")
     dot.Size             = UDim2.fromOffset(7, 7)
     dot.Position         = UDim2.new(1, -10, 0, 5)
@@ -266,23 +258,22 @@ function M.init(Modules)
     -- ═══════ VISUELE FEEDBACK ═══════
     local function updateIconLook()
         if guiVisible then
-            btnStroke.Color      = Color3.fromRGB(0, 220, 255)
-            btnStroke.Transparency = 0.15
-            label.TextColor3     = Color3.fromRGB(210, 240, 255)
-            labelHub.TextColor3  = Color3.fromRGB(0, 200, 240)
-            dot.BackgroundColor3 = Color3.fromRGB(80, 255, 120)
+            btnStroke.Color             = Color3.fromRGB(0, 220, 255)
+            btnStroke.Transparency      = 0.15
+            label.TextColor3            = Color3.fromRGB(210, 240, 255)
+            labelHub.TextColor3         = Color3.fromRGB(0, 200, 240)
+            dot.BackgroundColor3        = Color3.fromRGB(80, 255, 120)
             accentLine.BackgroundColor3 = Color3.fromRGB(0, 220, 255)
         else
-            btnStroke.Color      = Color3.fromRGB(255, 60, 60)
-            btnStroke.Transparency = 0
-            label.TextColor3     = Color3.fromRGB(255, 140, 140)
-            labelHub.TextColor3  = Color3.fromRGB(255, 80, 80)
-            dot.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+            btnStroke.Color             = Color3.fromRGB(255, 60, 60)
+            btnStroke.Transparency      = 0
+            label.TextColor3            = Color3.fromRGB(255, 140, 140)
+            labelHub.TextColor3         = Color3.fromRGB(255, 80, 80)
+            dot.BackgroundColor3        = Color3.fromRGB(255, 60, 60)
             accentLine.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
         end
     end
 
-    -- ═══════ HOVER EFFECT ═══════
     btn.MouseEnter:Connect(function()
         btnStroke.Thickness    = 2
         btnStroke.Transparency = 0
@@ -292,7 +283,7 @@ function M.init(Modules)
         btnStroke.Transparency = guiVisible and 0.15 or 0
     end)
 
-    -- ═══════ DRAG + KLIK LOGICA (van Opus) ═══════
+    -- ═══════ DRAG + KLIK LOGICA ═══════
     local dragging  = false
     local dragStart = Vector3.zero
     local startPos  = UDim2.new()
@@ -327,7 +318,6 @@ function M.init(Modules)
             if totalDrag < 8 then
                 setFluentVisible(not guiVisible)
                 updateIconLook()
-                -- Subtiele klik animatie (geen pulse, gewoon even indrukken)
                 task.spawn(function()
                     pcall(function()
                         TS:Create(btn, TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
@@ -347,7 +337,7 @@ function M.init(Modules)
 
     -- ═══════ DUMMY PARAGRAPHS ═══════
     local dP = { SetTitle = function() end, SetDesc = function() end }
-    local FSP, FPP, LBSP, TTSP, FCSP, DMSP, VSP, ASP, FISP, MSP, USP, MFSP, GDSP, AFKSP, IP = dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP
+    local FSP, FPP, LBSP, TTSP, FCSP, DMSP, VSP, ASP, FISP, PHSP, MSP, USP, MFSP, GDSP, AFKSP, IP = dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP
 
     -- ========== FARM TAB ==========
     local FT = W:AddTab({Title = "Farm", Icon = "leaf"})
@@ -402,14 +392,24 @@ function M.init(Modules)
 
     -- ========== EVENTS TAB ==========
     local ET = W:AddTab({Title = "Events", Icon = "party-popper"})
+
     local DMTG = ET:AddToggle("DoomToggle",     {Title = "🌋 Collect Auto Doom Coins",          Default = true})
     DMTG:OnChanged(function(v) if v then MzD.startDoomCollector() else MzD.stopDoomCollector() end end)
+
     local VTG  = ET:AddToggle("ValentineToggle", {Title = "💝 Auto Collect Hearts and Candy",    Default = true})
     VTG:OnChanged(function(v)  if v then MzD.startValentine()     else MzD.stopValentine()     end end)
+
     local ATG  = ET:AddToggle("ArcadeToggle",    {Title = "🕹️ Auto collect controllers & coins", Default = true})
     ATG:OnChanged(function(v)  if v then MzD.startArcade()        else MzD.stopArcade()        end end)
+
     local FITG = ET:AddToggle("FireiceToggle",   {Title = "🔥 Auto Fire & Ice Coins",            Default = true})
     FITG:OnChanged(function(v) if v then MzD.startFireice()       else MzD.stopFireice()       end end)
+
+    -- 👻 Phantom Event toggle — auto-start via module, maar handmatig te pauzeren
+    local PHTG = ET:AddToggle("PhantomToggle",   {Title = "👻 Auto Phantom Shards, Orbs & Coins", Default = MzD.S.PhantomEnabled})
+    PHTG:OnChanged(function(v)
+        if v then MzD.startPhantom() else MzD.stopPhantom() end
+    end)
 
     -- ========== TOOLS TAB ==========
     local AT2 = W:AddTab({Title = "Tools", Icon = "wrench"})
@@ -463,11 +463,12 @@ function M.init(Modules)
         TTSP = TTSP, TTTG = TTTG,
         FCSP = FCSP, FCTG = FCTG,
         DMSP = DMSP, DMTG = DMTG,
-        VSP = VSP, VTG = VTG,
-        ASP = ASP, ATG = ATG,
+        VSP = VSP,   VTG  = VTG,
+        ASP = ASP,   ATG  = ATG,
         FISP = FISP, FITG = FITG,
-        MSP = MSP, MTG = MTG,
-        USP = USP, UTG = UTG,
+        PHSP = PHSP, PHTG = PHTG,   -- 👻 Phantom refs
+        MSP = MSP,   MTG  = MTG,
+        USP = USP,   UTG  = UTG,
         MFSP = MFSP, MFTG = MFTG,
         AFKSP = AFKSP, AFKTG = AFKTG,
         GDSP = GDSP, GDTG = GDTG,
