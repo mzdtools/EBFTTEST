@@ -54,6 +54,7 @@ function M.init(Modules)
     local GODWALKY  = {"5","3","1","0","-1","-2","-3","-5","-8","-10","-15"}
     local GODFLOORY = {"15","12","10","8","5","3","0","-3","-5","-8","-10","-15","-20"}
 
+    -- MinimizeKey op iets onbruikbaars zodat het niet in de weg zit
     local W = Fluent:CreateWindow({
         Title       = "MzD Hub",
         SubTitle    = "v13.0 Clean",
@@ -61,11 +62,30 @@ function M.init(Modules)
         Size        = UDim2.fromOffset(640, 540),
         Acrylic     = true,
         Theme       = "Dark",
-        MinimizeKey = Enum.KeyCode.RightControl
+        MinimizeKey = Enum.KeyCode.Unknown
     })
 
     -- ==========================================
-    -- DRAGGABLE TOGGLE ICON (MuMu / Mobile safe)
+    -- ZOEK DE FLUENT SCREENGUI
+    -- ==========================================
+    twait(0.5)
+    local fluentGui = nil
+    pcall(function()
+        for _, gui in pairs(Player.PlayerGui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Name ~= "MzDHubToggle" then
+                for _, d in pairs(gui:GetDescendants()) do
+                    if d:IsA("TextLabel") and d.Text == "MzD Hub" then
+                        fluentGui = gui
+                        break
+                    end
+                end
+            end
+            if fluentGui then break end
+        end
+    end)
+
+    -- ==========================================
+    -- DRAGGABLE TOGGLE ICON
     -- ==========================================
     local toggleGui = Instance.new("ScreenGui")
     toggleGui.Name = "MzDHubToggle"
@@ -99,7 +119,7 @@ function M.init(Modules)
     btnStroke.Transparency = 0.2
     btnStroke.Parent = toggleBtn
 
-    -- Shadow ring
+    -- Glow/shadow ring
     local shadow = Instance.new("Frame")
     shadow.Name = "Shadow"
     shadow.Size = UDim2.fromOffset(56, 56)
@@ -114,22 +134,45 @@ function M.init(Modules)
     shadowCorner.CornerRadius = UDim.new(1, 0)
     shadowCorner.Parent = shadow
 
-    -- Find Fluent ScreenGui reference
-    twait(0.3)
-    local fluentGui = nil
-    pcall(function()
-        for _, gui in pairs(Player.PlayerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui ~= toggleGui then
-                for _, d in pairs(gui:GetDescendants()) do
-                    if d:IsA("TextLabel") and d.Text == "MzD Hub" then
-                        fluentGui = gui
-                        break
-                    end
-                end
-            end
-            if fluentGui then break end
+    -- Track GUI visibility
+    local guiVisible = true
+
+    local function updateIconLook()
+        if guiVisible then
+            toggleBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
+            btnStroke.Color = Color3.fromRGB(120, 80, 220)
+            toggleBtn.TextColor3 = Color3.fromRGB(180, 140, 255)
+        else
+            toggleBtn.BackgroundColor3 = Color3.fromRGB(55, 20, 20)
+            btnStroke.Color = Color3.fromRGB(200, 60, 60)
+            toggleBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
         end
-    end)
+    end
+
+    local function toggleWindow()
+        -- Probeer Fluent GUI opnieuw te vinden als het nil is
+        if not fluentGui then
+            pcall(function()
+                for _, gui in pairs(Player.PlayerGui:GetChildren()) do
+                    if gui:IsA("ScreenGui") and gui.Name ~= "MzDHubToggle" then
+                        for _, d in pairs(gui:GetDescendants()) do
+                            if d:IsA("TextLabel") and d.Text == "MzD Hub" then
+                                fluentGui = gui
+                                break
+                            end
+                        end
+                    end
+                    if fluentGui then break end
+                end
+            end)
+        end
+
+        if fluentGui then
+            guiVisible = not guiVisible
+            fluentGui.Enabled = guiVisible
+            updateIconLook()
+        end
+    end
 
     -- Drag logic
     local dragging  = false
@@ -163,34 +206,9 @@ function M.init(Modules)
         if (input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch) and dragging then
             dragging = false
+            -- Alleen toggle als je NIET gesleept hebt (klik/tap)
             if dragDelta < 6 then
-                -- TAP / CLICK → toggle the Fluent window
-                if not fluentGui then
-                    pcall(function()
-                        for _, gui in pairs(Player.PlayerGui:GetChildren()) do
-                            if gui:IsA("ScreenGui") and gui ~= toggleGui then
-                                for _, d in pairs(gui:GetDescendants()) do
-                                    if d:IsA("TextLabel") and d.Text == "MzD Hub" then
-                                        fluentGui = gui break
-                                    end
-                                end
-                            end
-                            if fluentGui then break end
-                        end
-                    end)
-                end
-                if fluentGui then
-                    fluentGui.Enabled = not fluentGui.Enabled
-                    if fluentGui.Enabled then
-                        toggleBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
-                        btnStroke.Color = Color3.fromRGB(120, 80, 220)
-                        toggleBtn.TextColor3 = Color3.fromRGB(180, 140, 255)
-                    else
-                        toggleBtn.BackgroundColor3 = Color3.fromRGB(55, 20, 20)
-                        btnStroke.Color = Color3.fromRGB(200, 60, 60)
-                        toggleBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-                    end
-                end
+                toggleWindow()
             end
         end
     end)
@@ -202,7 +220,7 @@ function M.init(Modules)
     -- ========== FARM TAB ==========
     local FT  = W:AddTab({Title = "Farm", Icon = "leaf"})
 
-    -- Tower Trial Farm (Bovenaan)
+    -- Tower Trial Farm
     local TTTG = FT:AddToggle("TowerTrialToggle", {Title = "🏆 Auto Tower Trial Farm", Default = false})
     TTTG:OnChanged(function(v)
         if v then
