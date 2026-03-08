@@ -52,7 +52,7 @@ function M.init(Modules)
     local GODWALKY  = {"5","3","1","0","-1","-2","-3","-5","-8","-10","-15"}
     local GODFLOORY = {"15","12","10","8","5","3","0","-3","-5","-8","-10","-15","-20"}
 
-    -- No MinimizeKey — we handle show/hide ourselves via the icon to support MuMu
+    -- No MinimizeKey — handled by our own icon
     local W = Fluent:CreateWindow({
         Title    = "MzD Hub",
         SubTitle = "v13.0 Clean",
@@ -66,15 +66,16 @@ function M.init(Modules)
     -- SHARED VISIBLE STATE
     -- ============================================
     local _wVisible = true
-    local _mainGui  = nil  -- reference to Fluent's ScreenGui, filled below
+    local _mainGui  = nil
 
     local function setWindowVisible(v)
         _wVisible = v
-        if _mainGui then
+        -- Try cached reference first
+        if _mainGui and _mainGui.Parent then
             _mainGui.Enabled = v
             return
         end
-        -- Fallback: locate by title label
+        -- Fallback: scan PlayerGui
         for _, gui in pairs(Player.PlayerGui:GetChildren()) do
             if gui:IsA("ScreenGui") and gui.Name ~= "MzDIconToggle" then
                 for _, d in pairs(gui:GetDescendants()) do
@@ -90,8 +91,6 @@ function M.init(Modules)
 
     -- ============================================
     -- DRAGGABLE FLOATING ICON (MuMu safe)
-    -- Click icon  → shows the window
-    -- Click X     → hides to icon
     -- ============================================
     local _iconGui = Instance.new("ScreenGui")
     _iconGui.Name           = "MzDIconToggle"
@@ -112,7 +111,7 @@ function M.init(Modules)
     _corner.CornerRadius = UDim.new(0.2, 0)
     _corner.Parent       = _iconBtn
 
-    -- Drag logic for Mouse & Touch (MuMu Player)
+    -- Drag logic
     local _dragging  = false
     local _dragStart = nil
     local _startPos  = nil
@@ -160,39 +159,100 @@ function M.init(Modules)
     end)
 
     -- ============================================
-    -- INTERCEPT FLUENT'S X / CLOSE BUTTON
+    -- REPLACE FLUENT'S CLOSE BUTTON
+    -- We wait 1s for Fluent to fully render,
+    -- then DESTROY the original close button and
+    -- put our own identical-looking one in its place.
+    -- This avoids any event-bubbling issues entirely.
     -- ============================================
-    twait(0.2)
-    pcall(function()
-        for _, gui in pairs(Player.PlayerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Name ~= "MzDIconToggle" then
-                for _, d in pairs(gui:GetDescendants()) do
-                    if d:IsA("TextLabel") and d.Text == "MzD Hub" then
-                        _mainGui = gui
+    task.spawn(function()
+        twait(1)
+        pcall(function()
+            -- Step 1: find the Fluent ScreenGui
+            for _, gui in pairs(Player.PlayerGui:GetChildren()) do
+                if gui:IsA("ScreenGui") and gui.Name ~= "MzDIconToggle" then
+                    for _, d in pairs(gui:GetDescendants()) do
+                        if d:IsA("TextLabel") and d.Text == "MzD Hub" then
+                            _mainGui = gui
 
-                        for _, btn in pairs(gui:GetDescendants()) do
-                            if btn:IsA("ImageButton") or btn:IsA("TextButton") then
-                                local n = btn.Name:lower()
-                                if n == "close" or n == "closebutton" or n == "exit" or n == "x" then
-                                    local blocker = Instance.new("TextButton")
-                                    blocker.Size                   = UDim2.fromScale(1, 1)
-                                    blocker.BackgroundTransparency = 1
-                                    blocker.Text                   = ""
-                                    blocker.ZIndex                 = btn.ZIndex + 10
-                                    blocker.Parent                 = btn
-                                    blocker.MouseButton1Click:Connect(function()
-                                        setWindowVisible(false)
-                                    end)
+                            -- Step 2: log ALL buttons so we can debug if needed
+                            for _, btn in pairs(gui:GetDescendants()) do
+                                if btn:IsA("ImageButton") or btn:IsA("TextButton") then
+                                    warn("[MzD Close Scan] " .. btn.Name .. " | Parent: " .. btn.Parent.Name)
                                 end
                             end
+
+                            -- Step 3: find close button by any likely name
+                            local TARGET_NAMES = {
+                                "close", "closebutton", "exit", "x",
+                                "closewindow", "close_button", "btnclose",
+                            }
+                            for _, btn in pairs(gui:GetDescendants()) do
+                                if (btn:IsA("ImageButton") or btn:IsA("TextButton")) 
+                                and not btn:FindFirstChild("_mzdReplaced") then
+                                    local n = string.lower(btn.Name)
+                                    local matched = false
+                                    for _, t in pairs(TARGET_NAMES) do
+                                        if n == t then matched = true break end
+                                    end
+
+                                    if matched then
+                                        warn("[MzD] Sluitknop gevonden en vervangen: " .. btn.Name)
+
+                                        -- Clone appearance, destroy original, parent our copy
+                                        local parent   = btn.Parent
+                                        local pos      = btn.Position
+                                        local size     = btn.Size
+                                        local zindex   = btn.ZIndex
+                                        local imgId    = btn:IsA("ImageButton") and btn.Image or nil
+                                        local imgColor = btn:IsA("ImageButton") and btn.ImageColor3 or Color3.new(1,1,1)
+                                        local bgTrans  = btn.BackgroundTransparency
+                                        local bgColor  = btn.BackgroundColor3
+
+                                        btn:Destroy()
+
+                                        local newBtn
+                                        if imgId then
+                                            newBtn = Instance.new("ImageButton")
+                                            newBtn.Image        = imgId
+                                            newBtn.ImageColor3  = imgColor
+                                        else
+                                            newBtn = Instance.new("TextButton")
+                                            newBtn.Text         = "✕"
+                                            newBtn.TextColor3   = Color3.new(1,1,1)
+                                            newBtn.Font         = Enum.Font.GothamBold
+                                            newBtn.TextSize     = 14
+                                        end
+
+                                        newBtn.Name                   = "_mzdCloseBtn"
+                                        newBtn.Position               = pos
+                                        newBtn.Size                   = size
+                                        newBtn.ZIndex                 = zindex
+                                        newBtn.BackgroundTransparency = bgTrans
+                                        newBtn.BackgroundColor3       = bgColor
+
+                                        -- Tag so we don't replace it again
+                                        local tag = Instance.new("BoolValue")
+                                        tag.Name   = "_mzdReplaced"
+                                        tag.Parent = newBtn
+
+                                        newBtn.Parent = parent
+
+                                        newBtn.MouseButton1Click:Connect(function()
+                                            setWindowVisible(false)
+                                        end)
+                                    end
+                                end
+                            end
+                            break
                         end
-                        break
                     end
                 end
             end
-        end
+        end)
     end)
 
+    -- Onzichtbare dummy objecten om te voorkomen dat status_loop.lua crasht
     local dP = { SetTitle = function() end, SetDesc = function() end }
     local FSP, FPP, LBSP, TTSP, FCSP, DMSP, VSP, ASP, FISP, MSP, USP, MFSP, GDSP, AFKSP, IP = dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP
 
@@ -209,7 +269,7 @@ function M.init(Modules)
     local FTG = FT:AddToggle("FarmToggle", {Title = "🌾 Auto Farm", Default = true})
     FTG:OnChanged(function(v) if v then MzD.findBase() MzD.startFarming() else MzD.stopFarming() end end)
 
-    local RDD = FT:AddDropdown("FarmRarity", {Title = "⭐ Rarity", Values = RAR, Default = {"Common"}, Multi = true})
+    local RDD = FT:AddDropdown("FarmRarity", {Title = "⭐ Rarity", Values = RAR, Default = {"Divine", "Infinity"}, Multi = true})
     RDD:OnChanged(function(v)
         local s = {} for n, on in pairs(v) do if on then tinsert(s, n) end end
         if #s == 0 then s = {"Common"} end
