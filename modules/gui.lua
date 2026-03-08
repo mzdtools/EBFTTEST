@@ -16,7 +16,7 @@ function M.init(Modules)
     local god_mod = Modules.god_mode
 
     -- ============================================
-    -- STAP 1: ICOON DIRECT AANMAKEN
+    -- ICOON — meteen aanmaken
     -- ============================================
     pcall(function()
         local old = Player.PlayerGui:FindFirstChild("MzDIconToggle")
@@ -33,98 +33,112 @@ function M.init(Modules)
     local ICON_X = 0.62
     local ICON_Y = 0.02
 
-    local _shadow = Instance.new("Frame")
-    _shadow.Size                   = UDim2.new(0, 68, 0, 68)
-    _shadow.Position               = UDim2.new(ICON_X, -3, ICON_Y, -3)
-    _shadow.BackgroundColor3       = Color3.fromRGB(99, 102, 241)
-    _shadow.BackgroundTransparency = 0.6
-    _shadow.BorderSizePixel        = 0
-    _shadow.ZIndex                 = 9
-    _shadow.Parent                 = _iconGui
-    Instance.new("UICorner", _shadow).CornerRadius = UDim.new(0.3, 0)
-
+    -- Achtergrond: donker met subtiele cyan/blauw gradient
     local _iconFrame = Instance.new("Frame")
-    _iconFrame.Size             = UDim2.new(0, 62, 0, 62)
+    _iconFrame.Size             = UDim2.new(0, 64, 0, 64)
     _iconFrame.Position         = UDim2.new(ICON_X, 0, ICON_Y, 0)
-    _iconFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+    _iconFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 14)
     _iconFrame.BorderSizePixel  = 0
     _iconFrame.ZIndex           = 10
     _iconFrame.Parent           = _iconGui
-    Instance.new("UICorner", _iconFrame).CornerRadius = UDim.new(0.25, 0)
 
+    local _frameCorner = Instance.new("UICorner")
+    _frameCorner.CornerRadius = UDim.new(0.18, 0)  -- licht afgerond, niet cirkelvormig
+    _frameCorner.Parent       = _iconFrame
+
+    -- Subtiele gradient van donkerblauw naar bijna-zwart
     local _grad = Instance.new("UIGradient")
     _grad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 27, 75)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 10, 18)),
+        ColorSequenceKeypoint.new(0,   Color3.fromRGB(14, 20, 40)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(8,  12, 24)),
+        ColorSequenceKeypoint.new(1,   Color3.fromRGB(5,  5,  10)),
     })
-    _grad.Rotation = 135
+    _grad.Rotation = 145
     _grad.Parent   = _iconFrame
 
+    -- Scherpe neon cyan border
     local _stroke = Instance.new("UIStroke")
-    _stroke.Color        = Color3.fromRGB(99, 102, 241)
+    _stroke.Color        = Color3.fromRGB(0, 220, 255)   -- neon cyan
     _stroke.Thickness    = 1.5
-    _stroke.Transparency = 0.3
+    _stroke.Transparency = 0.15
     _stroke.Parent       = _iconFrame
 
+    -- Dunne decoratieve lijn bovenaan (accent)
+    local _accentLine = Instance.new("Frame")
+    _accentLine.Size                   = UDim2.new(0.6, 0, 0, 2)
+    _accentLine.Position               = UDim2.new(0.2, 0, 0, 0)
+    _accentLine.BackgroundColor3       = Color3.fromRGB(0, 220, 255)
+    _accentLine.BackgroundTransparency = 0
+    _accentLine.BorderSizePixel        = 0
+    _accentLine.ZIndex                 = 11
+    _accentLine.Parent                 = _iconFrame
+    local _accentGrad = Instance.new("UIGradient")
+    _accentGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0,   Color3.fromRGB(0, 220, 255)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(180, 240, 255)),
+        ColorSequenceKeypoint.new(1,   Color3.fromRGB(0, 220, 255)),
+    })
+    _accentGrad.Rotation = 0
+    _accentGrad.Parent   = _accentLine
+
+    -- "MzD" tekst — groot, wit, bold
     local _lMzD = Instance.new("TextLabel")
-    _lMzD.Size                   = UDim2.new(1, 0, 0.55, 0)
-    _lMzD.Position               = UDim2.fromOffset(0, 6)
+    _lMzD.Size                   = UDim2.new(1, 0, 0.52, 0)
+    _lMzD.Position               = UDim2.new(0, 0, 0.08, 0)
     _lMzD.BackgroundTransparency = 1
     _lMzD.Text                   = "MzD"
-    _lMzD.TextColor3             = Color3.fromRGB(255, 255, 255)
+    _lMzD.TextColor3             = Color3.fromRGB(210, 240, 255)
     _lMzD.Font                   = Enum.Font.GothamBold
-    _lMzD.TextSize               = 17
-    _lMzD.ZIndex                 = 11
+    _lMzD.TextSize               = 18
+    _lMzD.ZIndex                 = 12
     _lMzD.Parent                 = _iconFrame
-    local _tg = Instance.new("UIGradient")
-    _tg.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(165, 180, 252)),
-    })
-    _tg.Rotation = 90
-    _tg.Parent   = _lMzD
 
+    -- "HUB" tekst — klein, cyan, monospace gevoel
     local _lHub = Instance.new("TextLabel")
-    _lHub.Size                   = UDim2.new(1, 0, 0.35, 0)
-    _lHub.Position               = UDim2.new(0, 0, 0.6, 0)
+    _lHub.Size                   = UDim2.new(1, 0, 0.28, 0)
+    _lHub.Position               = UDim2.new(0, 0, 0.62, 0)
     _lHub.BackgroundTransparency = 1
-    _lHub.Text                   = "Hub"
-    _lHub.TextColor3             = Color3.fromRGB(129, 140, 248)
-    _lHub.Font                   = Enum.Font.Gotham
+    _lHub.Text                   = "HUB"
+    _lHub.TextColor3             = Color3.fromRGB(0, 200, 240)
+    _lHub.Font                   = Enum.Font.Code
     _lHub.TextSize               = 11
-    _lHub.ZIndex                 = 11
+    _lHub.ZIndex                 = 12
     _lHub.Parent                 = _iconFrame
 
+    -- Klikbaar transparant knopje
     local _iconBtn = Instance.new("TextButton")
-    _iconBtn.Size                   = UDim2.new(0, 62, 0, 62)
+    _iconBtn.Size                   = UDim2.new(0, 64, 0, 64)
     _iconBtn.Position               = UDim2.new(ICON_X, 0, ICON_Y, 0)
     _iconBtn.BackgroundTransparency = 1
     _iconBtn.Text                   = ""
-    _iconBtn.ZIndex                 = 12
+    _iconBtn.ZIndex                 = 13
     _iconBtn.Parent                 = _iconGui
-    Instance.new("UICorner", _iconBtn).CornerRadius = UDim.new(0.25, 0)
+    local _btnCorner = Instance.new("UICorner")
+    _btnCorner.CornerRadius = UDim.new(0.18, 0)
+    _btnCorner.Parent       = _iconBtn
 
+    -- Hover: border iets feller, geen animaties
     _iconBtn.MouseEnter:Connect(function()
         _stroke.Transparency = 0
         _stroke.Thickness    = 2
-        _shadow.BackgroundTransparency = 0.4
+        _stroke.Color        = Color3.fromRGB(80, 240, 255)
     end)
     _iconBtn.MouseLeave:Connect(function()
-        _stroke.Transparency = 0.3
+        _stroke.Transparency = 0.15
         _stroke.Thickness    = 1.5
-        _shadow.BackgroundTransparency = 0.6
+        _stroke.Color        = Color3.fromRGB(0, 220, 255)
     end)
 
-    local function moveAll(pos)
-        _iconFrame.Position = pos
-        _iconBtn.Position   = pos
-        _shadow.Position    = UDim2.new(pos.X.Scale, pos.X.Offset - 3, pos.Y.Scale, pos.Y.Offset - 3)
-    end
-
+    -- Drag logic
     local _dragging  = false
     local _dragStart = nil
     local _startPos  = nil
     local _dragMoved = false
+
+    local function moveAll(pos)
+        _iconFrame.Position = pos
+        _iconBtn.Position   = pos
+    end
 
     _iconBtn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
@@ -158,9 +172,7 @@ function M.init(Modules)
     end)
 
     -- ============================================
-    -- STAP 2: FLUENT LADEN
-    -- Snapshot VOOR CreateWindow → daarna weten
-    -- we exact welke ScreenGui Fluent aanmaakte
+    -- FLUENT LADEN
     -- ============================================
     twait(0.5)
     pcall(function()
@@ -200,9 +212,7 @@ function M.init(Modules)
 
     -- Snapshot vóór CreateWindow
     local _before = {}
-    for _, gui in pairs(Player.PlayerGui:GetChildren()) do
-        _before[gui] = true
-    end
+    for _, gui in pairs(Player.PlayerGui:GetChildren()) do _before[gui] = true end
 
     local W = Fluent:CreateWindow({
         Title    = "MzD Hub",
@@ -213,43 +223,34 @@ function M.init(Modules)
         Theme    = "Dark",
     })
 
-    -- Vind de NIEUWE ScreenGui die Fluent net aanmaakte
+    -- Vind de nieuwe Fluent ScreenGui
     local _fluentGui = nil
     for _, gui in pairs(Player.PlayerGui:GetChildren()) do
         if not _before[gui] and gui:IsA("ScreenGui") then
             _fluentGui = gui
-            warn("[MzD] Fluent ScreenGui gevonden: " .. gui.Name)
             break
         end
     end
 
-    -- Toggle functie — nu simpel en betrouwbaar
+    -- Toggle
     local _wVisible = true
     local function toggleWindow()
-        if not _fluentGui then
-            warn("[MzD] _fluentGui is nil, kan niet togglen!")
-            return
-        end
+        if not _fluentGui then return end
         _wVisible = not _wVisible
         _fluentGui.Enabled = _wVisible
-        warn("[MzD] Window visible: " .. tostring(_wVisible))
     end
 
-    -- Icoon klik = TOGGLE (niet alleen show)
     _iconBtn.MouseButton1Click:Connect(function()
         if _dragMoved then return end
         toggleWindow()
     end)
 
-    -- ============================================
-    -- STAP 3: NA LADEN — hint verbergen + X knop
-    -- ============================================
+    -- Na laden: hints verbergen + X knop vervangen
     task.spawn(function()
         twait(1)
         pcall(function()
             if not _fluentGui then return end
 
-            -- Verberg Ctrl/keybind hints
             for _, lbl in pairs(_fluentGui:GetDescendants()) do
                 if lbl:IsA("TextLabel") then
                     local t = lbl.Text:lower()
@@ -260,14 +261,6 @@ function M.init(Modules)
                 end
             end
 
-            -- Debug: alle knoppen printen
-            for _, btn in pairs(_fluentGui:GetDescendants()) do
-                if btn:IsA("ImageButton") or btn:IsA("TextButton") then
-                    warn("[MzD] Knop: '" .. btn.Name .. "' | Parent: '" .. btn.Parent.Name .. "'")
-                end
-            end
-
-            -- X knop vervangen
             local TARGET_NAMES = {
                 "close","closebutton","exit","x",
                 "closewindow","close_button","btnclose",
@@ -275,13 +268,11 @@ function M.init(Modules)
             for _, btn in pairs(_fluentGui:GetDescendants()) do
                 if (btn:IsA("ImageButton") or btn:IsA("TextButton"))
                 and not btn:FindFirstChild("_mzdReplaced") then
-                    local n = string.lower(btn.Name)
                     local matched = false
                     for _, t in pairs(TARGET_NAMES) do
-                        if n == t then matched = true break end
+                        if string.lower(btn.Name) == t then matched = true break end
                     end
                     if matched then
-                        warn("[MzD] Sluitknop vervangen: " .. btn.Name)
                         local parent   = btn.Parent
                         local pos      = btn.Position
                         local size     = btn.Size
