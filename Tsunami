@@ -15,7 +15,7 @@ local moduleNames = {
     "utility",
     "base_detection",
     "doom_collector",
-    "map_utils",        -- ← basis voor god_mode en map_fixer
+    "map_utils",
     "god_mode",
     "movement",
     "rarity_filter",
@@ -33,6 +33,7 @@ local moduleNames = {
     "instant_pickup",
     "valentine",
     "arcade",
+    "phantom_event",   -- ← Phantom Event module
     "map_fixer",
     "respawn_handler",
     "gui",
@@ -52,26 +53,23 @@ local totalFailed = 0
 local loadStart   = tick()
 
 for _, name in ipairs(moduleNames) do
-    local url        = BASE_URL .. name .. ".lua"
-    local result     = nil
-    local loaded     = false
+    local url         = BASE_URL .. name .. ".lua"
+    local result      = nil
+    local loaded      = false
     local moduleStart = tick()
 
     for attempt = 1, 3 do
         local ok, res = pcall(function()
             local source = game:HttpGet(url)
 
-            -- Lege of te korte response
             if not source or source == "" or #source < 50 then
                 error("Lege of te korte response (" .. #(source or "") .. " bytes)")
             end
 
-            -- Delta/GitHub geeft soms een HTML-foutpagina terug
             if source:sub(1, 1) == "<" then
                 error("HTML ontvangen in plaats van Lua (waarschijnlijk 404)")
             end
 
-            -- Probeer te compileren vóór uitvoering
             local fn, syntaxErr = loadstring(source)
             if not fn then
                 error("Syntax-fout: " .. tostring(syntaxErr))
@@ -94,15 +92,15 @@ for _, name in ipairs(moduleNames) do
     end
 
     if loaded and result then
-        Modules[name] = result
-        totalLoaded  += 1
+        Modules[name]  = result
+        totalLoaded   += 1
         print(string.format(
             "[MzD Hub] ✓ %s geladen in %.2fs",
             name, tick() - moduleStart
         ))
     else
-        totalFailed  += 1
-        Modules[name] = { init = function() end }
+        totalFailed   += 1
+        Modules[name]  = { init = function() end }
         warn(string.format(
             "[MzD Hub] ✗ Module '%s' kon niet worden geladen — noodvervanging actief",
             name
@@ -119,8 +117,8 @@ for _, name in ipairs(moduleNames) do
     if name ~= "globals" then
         local mod = Modules[name]
         if mod and mod.init then
-            local initStart    = tick()
-            local ok, err = pcall(function()
+            local initStart = tick()
+            local ok, err   = pcall(function()
                 mod.init(Modules)
             end)
             if ok then
