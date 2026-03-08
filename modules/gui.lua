@@ -52,7 +52,7 @@ function M.init(Modules)
     local GODWALKY  = {"5","3","1","0","-1","-2","-3","-5","-8","-10","-15"}
     local GODFLOORY = {"15","12","10","8","5","3","0","-3","-5","-8","-10","-15","-20"}
 
-    -- No MinimizeKey — we handle show/hide ourselves via the icon
+    -- No MinimizeKey — we handle show/hide ourselves via the icon to support MuMu
     local W = Fluent:CreateWindow({
         Title    = "MzD Hub",
         SubTitle = "v13.0 Clean",
@@ -112,7 +112,7 @@ function M.init(Modules)
     _corner.CornerRadius = UDim.new(0.2, 0)
     _corner.Parent       = _iconBtn
 
-    -- Drag logic
+    -- Drag logic for Mouse & Touch (MuMu Player)
     local _dragging  = false
     local _dragStart = nil
     local _startPos  = nil
@@ -161,8 +161,6 @@ function M.init(Modules)
 
     -- ============================================
     -- INTERCEPT FLUENT'S X / CLOSE BUTTON
-    -- Places a transparent blocker on top so the
-    -- window hides instead of being destroyed.
     -- ============================================
     twait(0.2)
     pcall(function()
@@ -195,7 +193,6 @@ function M.init(Modules)
         end
     end)
 
-    -- Onzichtbare dummy objecten om te voorkomen dat status_loop.lua crasht
     local dP = { SetTitle = function() end, SetDesc = function() end }
     local FSP, FPP, LBSP, TTSP, FCSP, DMSP, VSP, ASP, FISP, MSP, USP, MFSP, GDSP, AFKSP, IP = dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP
 
@@ -212,7 +209,7 @@ function M.init(Modules)
     local FTG = FT:AddToggle("FarmToggle", {Title = "🌾 Auto Farm", Default = true})
     FTG:OnChanged(function(v) if v then MzD.findBase() MzD.startFarming() else MzD.stopFarming() end end)
 
-    local RDD = FT:AddDropdown("FarmRarity", {Title = "⭐ Rarity", Values = RAR, Default = {"Divine", "Infinity"}, Multi = true})
+    local RDD = FT:AddDropdown("FarmRarity", {Title = "⭐ Rarity", Values = RAR, Default = {"Common"}, Multi = true})
     RDD:OnChanged(function(v)
         local s = {} for n, on in pairs(v) do if on then tinsert(s, n) end end
         if #s == 0 then s = {"Common"} end
