@@ -52,24 +52,53 @@ function M.init(Modules)
     local GODWALKY  = {"5","3","1","0","-1","-2","-3","-5","-8","-10","-15"}
     local GODFLOORY = {"15","12","10","8","5","3","0","-3","-5","-8","-10","-15","-20"}
 
+    -- No MinimizeKey — we handle show/hide ourselves via the icon
     local W = Fluent:CreateWindow({
-        Title       = "MzD Hub",
-        SubTitle    = "v13.0 Clean",
-        TabWidth    = 160,
-        Size        = UDim2.fromOffset(640, 540),
-        Acrylic     = true,
-        Theme       = "Dark",
+        Title    = "MzD Hub",
+        SubTitle = "v13.0 Clean",
+        TabWidth = 160,
+        Size     = UDim2.fromOffset(640, 540),
+        Acrylic  = true,
+        Theme    = "Dark",
     })
 
     -- ============================================
-    -- DRAGGABLE FLOATING ICON TOGGLE (MuMu safe)
+    -- SHARED VISIBLE STATE
+    -- ============================================
+    local _wVisible = true
+    local _mainGui  = nil  -- reference to Fluent's ScreenGui, filled below
+
+    local function setWindowVisible(v)
+        _wVisible = v
+        if _mainGui then
+            _mainGui.Enabled = v
+            return
+        end
+        -- Fallback: locate by title label
+        for _, gui in pairs(Player.PlayerGui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Name ~= "MzDIconToggle" then
+                for _, d in pairs(gui:GetDescendants()) do
+                    if d:IsA("TextLabel") and d.Text == "MzD Hub" then
+                        _mainGui = gui
+                        gui.Enabled = v
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    -- ============================================
+    -- DRAGGABLE FLOATING ICON (MuMu safe)
+    -- Click icon  → shows the window
+    -- Click X     → hides to icon
     -- ============================================
     local _iconGui = Instance.new("ScreenGui")
-    _iconGui.Name             = "MzDIconToggle"
-    _iconGui.ResetOnSpawn     = false
-    _iconGui.DisplayOrder     = 999
-    _iconGui.IgnoreGuiInset   = true
-    _iconGui.Parent           = Player.PlayerGui
+    _iconGui.Name           = "MzDIconToggle"
+    _iconGui.ResetOnSpawn   = false
+    _iconGui.DisplayOrder   = 999
+    _iconGui.IgnoreGuiInset = true
+    _iconGui.Parent         = Player.PlayerGui
 
     local _iconBtn = Instance.new("ImageButton")
     _iconBtn.Size                   = UDim2.fromOffset(54, 54)
@@ -79,16 +108,15 @@ function M.init(Modules)
     _iconBtn.ZIndex                 = 10
     _iconBtn.Parent                 = _iconGui
 
-    -- Rounded corners on the icon
     local _corner = Instance.new("UICorner")
     _corner.CornerRadius = UDim.new(0.2, 0)
     _corner.Parent       = _iconBtn
 
     -- Drag logic
-    local _dragging   = false
-    local _dragStart  = nil
-    local _startPos   = nil
-    local _dragMoved  = false
+    local _dragging  = false
+    local _dragStart = nil
+    local _startPos  = nil
+    local _dragMoved = false
 
     _iconBtn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
@@ -123,16 +151,43 @@ function M.init(Modules)
         end
     end)
 
-    -- Toggle GUI visibility on click (only if not dragged)
-    local _wVisible = true
+    -- Tap icon → show window
     _iconBtn.MouseButton1Click:Connect(function()
         if _dragMoved then return end
-        _wVisible = not _wVisible
+        if not _wVisible then
+            setWindowVisible(true)
+        end
+    end)
+
+    -- ============================================
+    -- INTERCEPT FLUENT'S X / CLOSE BUTTON
+    -- Places a transparent blocker on top so the
+    -- window hides instead of being destroyed.
+    -- ============================================
+    twait(0.2)
+    pcall(function()
         for _, gui in pairs(Player.PlayerGui:GetChildren()) do
             if gui:IsA("ScreenGui") and gui.Name ~= "MzDIconToggle" then
                 for _, d in pairs(gui:GetDescendants()) do
                     if d:IsA("TextLabel") and d.Text == "MzD Hub" then
-                        gui.Enabled = _wVisible
+                        _mainGui = gui
+
+                        for _, btn in pairs(gui:GetDescendants()) do
+                            if btn:IsA("ImageButton") or btn:IsA("TextButton") then
+                                local n = btn.Name:lower()
+                                if n == "close" or n == "closebutton" or n == "exit" or n == "x" then
+                                    local blocker = Instance.new("TextButton")
+                                    blocker.Size                   = UDim2.fromScale(1, 1)
+                                    blocker.BackgroundTransparency = 1
+                                    blocker.Text                   = ""
+                                    blocker.ZIndex                 = btn.ZIndex + 10
+                                    blocker.Parent                 = btn
+                                    blocker.MouseButton1Click:Connect(function()
+                                        setWindowVisible(false)
+                                    end)
+                                end
+                            end
+                        end
                         break
                     end
                 end
@@ -145,21 +200,14 @@ function M.init(Modules)
     local FSP, FPP, LBSP, TTSP, FCSP, DMSP, VSP, ASP, FISP, MSP, USP, MFSP, GDSP, AFKSP, IP = dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP
 
     -- ========== FARM TAB ==========
-    local FT  = W:AddTab({Title = "Farm", Icon = "leaf"})
-    
-    -- Tower Trial Farm (Bovenaan)
+    local FT = W:AddTab({Title = "Farm", Icon = "leaf"})
+
     local TTTG = FT:AddToggle("TowerTrialToggle", {Title = "🏆 Auto Tower Trial Farm", Default = false})
     TTTG:OnChanged(function(v)
-        if v then
-            MzD.startTowerTrial()
-            MzD.startTrialHUD()
-        else
-            MzD.stopTowerTrial()
-            MzD.stopTrialHUD()
-        end
+        if v then MzD.startTowerTrial() MzD.startTrialHUD()
+        else MzD.stopTowerTrial() MzD.stopTrialHUD() end
     end)
 
-    -- Auto Farm
     local BDD = nil
     local FTG = FT:AddToggle("FarmToggle", {Title = "🌾 Auto Farm", Default = true})
     FTG:OnChanged(function(v) if v then MzD.findBase() MzD.startFarming() else MzD.stopFarming() end end)
@@ -180,12 +228,11 @@ function M.init(Modules)
         MzD.S.SelectedBrainrots = s
     end)
 
-    FT:AddDropdown("FarmMutation", {Title = "💎 Mutatie",   Values = MUT, Default = "None",          Multi = false}):OnChanged(function(v) MzD.S.TargetMutation = v end)
-    FT:AddDropdown("FarmMode",     {Title = "⚙️ Mode",      Values = FM,  Default = MzD.S.FarmMode,  Multi = false}):OnChanged(function(v) MzD.S.FarmMode = v end)
-    FT:AddDropdown("FarmSlot",     {Title = "📦 Slot",      Values = SL,  Default = MzD.S.FarmSlot,  Multi = false}):OnChanged(function(v) MzD.S.FarmSlot = v end)
+    FT:AddDropdown("FarmMutation", {Title = "💎 Mutatie",   Values = MUT, Default = "None",         Multi = false}):OnChanged(function(v) MzD.S.TargetMutation = v end)
+    FT:AddDropdown("FarmMode",     {Title = "⚙️ Mode",      Values = FM,  Default = MzD.S.FarmMode, Multi = false}):OnChanged(function(v) MzD.S.FarmMode = v end)
+    FT:AddDropdown("FarmSlot",     {Title = "📦 Slot",      Values = SL,  Default = MzD.S.FarmSlot, Multi = false}):OnChanged(function(v) MzD.S.FarmSlot = v end)
     FT:AddSlider("FarmMaxLevel",   {Title = "📈 Max Level", Default = MzD.S.MaxLevel, Min = 1, Max = 500, Rounding = 0}):OnChanged(function(v) MzD.S.MaxLevel = mfloor(v) end)
 
-    -- Lucky Blocks
     local LBTG = FT:AddToggle("LBToggle", {Title = "🎲 Auto Lucky Blocks", Default = true})
     LBTG:OnChanged(function(v) if v then MzD.findBase() MzD.startLuckyBlockFarm() else MzD.stopLuckyBlockFarm() end end)
     FT:AddDropdown("LBRarity",   {Title = "⭐ LB Rarity",  Values = LBR, Default = {"Divine", "Infinity", "Admin"}, Multi = true}):OnChanged(function(v)
@@ -196,7 +243,7 @@ function M.init(Modules)
 
     -- ========== FACTORY TAB ==========
     local FCT = W:AddTab({Title = "Factory", Icon = "factory"})
-    
+
     local FCTG = FCT:AddToggle("FactoryToggle", {Title = "🏭 Start Factory", Default = false})
     FCTG:OnChanged(function(v)
         if v then MzD.findBase() MzD.startFactoryLoop() else MzD.stopFactoryLoop() end
@@ -235,12 +282,12 @@ function M.init(Modules)
 
     local GDTG = AT2:AddToggle("GodToggle", {Title = "😇 God Mode", Default = false})
     GDTG:OnChanged(function(v) if v then MzD.enableGod() else MzD.disableGod() end end)
-    
-    AT2:AddDropdown("GodWalkY",  {Title = "🚶 Loop Y Offset",  Values = GODWALKY,  Default = "0",   Multi = false}):OnChanged(function(v)
+
+    AT2:AddDropdown("GodWalkY",  {Title = "🚶 Loop Y Offset", Values = GODWALKY,  Default = "0",   Multi = false}):OnChanged(function(v)
         MzD.S.GodWalkY = tonumber(v) or 0
         if MzD._isGod then god_mod.godTeleportUnder() end
     end)
-    AT2:AddDropdown("GodFloorY", {Title = "🟫 Vloer Y", Values = GODFLOORY, Default = "-10", Multi = false}):OnChanged(function(v)
+    AT2:AddDropdown("GodFloorY", {Title = "🟫 Vloer Y",       Values = GODFLOORY, Default = "-10", Multi = false}):OnChanged(function(v)
         MzD.S.GodFloorY = tonumber(v) or -10
         if MzD._isGod then
             local map = MzD.mapFindCurrentMap()
@@ -257,7 +304,7 @@ function M.init(Modules)
     AT2:AddToggle("InstantToggle", {Title = "⚡ Instant Pickup", Default = true}):OnChanged(function(v)
         MzD.S.InstantPickup = v if v then MzD.setupInstant() end
     end)
-    
+
     local AFKTG = AT2:AddToggle("AFKToggle", {Title = "🕐 Anti-AFK", Default = true})
     AFKTG:OnChanged(function(v) if v then MzD.startAFK() else MzD.stopAFK() end end)
 
