@@ -1,5 +1,11 @@
 -- ============================================
--- [MODULE 17] TOWER TRIAL FARM — v18 logica (COMMON FIX)
+-- [MODULE 17] TOWER TRIAL FARM — v18 logica
+-- Fixes: startParent check, pickup succes OR-conditie,
+--        safeUnequip altijd na submit, HUD waitStart loop,
+--        safePathTo voor submit (langs muur, niet rechtdoor),
+--        unstuck na claim via sideways escape + safeReturnToBase,
+--        safeUnequip pas op base (niet onder de tower),
+--        pickup verbeterd (cframe lock & recursive fire)
 -- ============================================
 
 local M = {}
@@ -86,8 +92,20 @@ function M.init(Modules)
     end
 
     local function trialGetRarity()
-        -- Direct vastgezet op Common voor maximale stabiliteit
-        return "Common"
+        local bar = trialGetBar() if not bar then return "?" end
+        local lbl = bar:FindFirstChild("Requirement")
+        if lbl and lbl.Text ~= "" then
+            local txt = lbl.Text:gsub("<[^>]+>",""):match("^%s*(.-)%s*$")
+            if txt ~= "" then return txt:match("Tower Trial:%s*(.+)") or txt end
+        end
+        for _, child in pairs(bar:GetDescendants()) do
+            if child:IsA("TextLabel") and child.Text ~= "" then
+                local txt    = child.Text:gsub("<[^>]+>","")
+                local rarity = txt:match("Tower Trial:%s*(.+)")
+                if rarity then return rarity:match("^%s*(.-)%s*$") end
+            end
+        end
+        return "?"
     end
 
     local function trialIsActive()
@@ -149,6 +167,7 @@ function M.init(Modules)
         return nil
     end
 
+    -- FIX 1: Beweeg zijwaarts weg van de tower zodat safePathTo niet blokkeert
     local function escapeFromTower(tower)
         local ch  = Player.Character if not ch then return end
         local hrp = ch:FindFirstChild("HumanoidRootPart") if not hrp then return end
@@ -234,6 +253,7 @@ function M.init(Modules)
                             MzD.Status.towerTrialCount = trialsDone
                             MzD.Status.towerTrial = "🎉 Trial #" .. trialsDone .. " KLAAR!"
 
+                            -- FIX 1: Eerst zijwaarts wegbewegen zodat safePathTo niet blokkeert
                             local tower = getTowerForTrial()
                             if tower then escapeFromTower(tower) end
 
@@ -272,11 +292,13 @@ function M.init(Modules)
                         
                         MzD.safePathTo(entry.root.CFrame * CFrame.new(0,3,0))
 
+                        -- FIX: Meer pogingen, positie updaten in de loop, en alle prompts afvuren
                         for attempt = 1, 15 do
                             if not MzD._towerTrialEnabled then break end
                             if not entry.b or entry.b.Parent ~= startParent then break end
                             if trialGetToolCount() > startTools then break end
                             
+                            -- Blijf strak op de root staan (handig als het item rolt/beweegt)
                             if entry.root then
                                 pcall(function()
                                     local char = Player.Character
@@ -338,9 +360,11 @@ function M.init(Modules)
 
                     -- ── STATE: COOLDOWN ──────────────────────────────
                     if state == "COOLDOWN" then
+                        -- FIX 1: Via corridor terug naar base (niet rechtdoor/onder tower)
                         MzD.Status.towerTrial = "🏠 Terugkeren naar base..."
                         MzD.safeReturnToBase()
 
+                        -- FIX 2: Pas unequippen als we op base zijn → brainrot terug in backpack
                         MzD.safeUnequip()
                         twait(0.3)
 
