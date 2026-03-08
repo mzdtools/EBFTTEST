@@ -14,222 +14,47 @@ function M.init(Modules)
     local sformat = G.sformat
     local mfloor  = G.mfloor
     local god_mod = Modules.god_mode
+    local UIS     = game:GetService("UserInputService")
+    local TS      = game:GetService("TweenService")
 
-    -- ============================================
-    -- SHOW/HIDE: togglet de Window Frame zelf,
-    -- niet de ScreenGui — dat werkt wel met Fluent
-    -- ============================================
-    local _wVisible  = true
-    local _winFrame  = nil  -- de echte Fluent window Frame
+    twait(0.5)
 
-    local function setWindowVisible(v)
-        _wVisible = v
-        if _winFrame and _winFrame.Parent then
-            _winFrame.Visible = v
-            return
-        end
-        -- Fallback: zoek de Frame op via de titel
-        for _, gui in pairs(Player.PlayerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Name ~= "MzDIconToggle" then
-                for _, d in pairs(gui:GetDescendants()) do
-                    if d:IsA("TextLabel") and d.Text == "MzD Hub" then
-                        -- Ga omhoog naar de root Frame van het venster
-                        local f = d
-                        while f and not f:IsA("ScreenGui") do
-                            if f:IsA("Frame") and f.Parent:IsA("ScreenGui") then
-                                _winFrame = f
+    -- ═══════ CLEANUP OLD INSTANCES ═══════
+    local function destroyOldGui(parent)
+        pcall(function()
+            for _, gui in pairs(parent:GetChildren()) do
+                if gui:IsA("ScreenGui") then
+                    if gui.Name == "MzDHubToggle" then
+                        gui:Destroy()
+                    else
+                        for _, d in pairs(gui:GetDescendants()) do
+                            if d:IsA("TextLabel") and d.Text == "MzD Hub" then
+                                gui:Destroy()
                                 break
                             end
-                            f = f.Parent
                         end
-                        if _winFrame then
-                            _winFrame.Visible = v
-                        end
-                        break
                     end
                 end
             end
-        end
+        end)
     end
-
-    -- ============================================
-    -- ICOON — meteen zichtbaar, rechts van midden
-    -- Positie: X ~60% van scherm, Y bovenaan
-    -- ============================================
-    pcall(function()
-        local old = Player.PlayerGui:FindFirstChild("MzDIconToggle")
-        if old then old:Destroy() end
-    end)
-
-    local _iconGui = Instance.new("ScreenGui")
-    _iconGui.Name           = "MzDIconToggle"
-    _iconGui.ResetOnSpawn   = false
-    _iconGui.DisplayOrder   = 999
-    _iconGui.IgnoreGuiInset = true
-    _iconGui.Parent         = Player.PlayerGui
-
-    -- Gebruik Scale zodat het altijd rechts van midden zit op elk scherm
-    local ICON_X = 0.62   -- 62% van schermbreedde = ruim rechts van midden
-    local ICON_Y = 0.02   -- 2% van schermhoogte = bovenaan
-
-    -- Glow schaduw
-    local _shadow = Instance.new("Frame")
-    _shadow.Name                    = "Shadow"
-    _shadow.Size                    = UDim2.new(0, 68, 0, 68)
-    _shadow.Position                = UDim2.new(ICON_X, -3, ICON_Y, -3)
-    _shadow.BackgroundColor3        = Color3.fromRGB(99, 102, 241)
-    _shadow.BackgroundTransparency  = 0.6
-    _shadow.BorderSizePixel         = 0
-    _shadow.ZIndex                  = 9
-    _shadow.Parent                  = _iconGui
-    Instance.new("UICorner", _shadow).CornerRadius = UDim.new(0.3, 0)
-
-    -- Hoofd frame
-    local _iconFrame = Instance.new("Frame")
-    _iconFrame.Name                 = "IconFrame"
-    _iconFrame.Size                 = UDim2.new(0, 62, 0, 62)
-    _iconFrame.Position             = UDim2.new(ICON_X, 0, ICON_Y, 0)
-    _iconFrame.BackgroundColor3     = Color3.fromRGB(15, 15, 20)
-    _iconFrame.BorderSizePixel      = 0
-    _iconFrame.ZIndex               = 10
-    _iconFrame.Parent               = _iconGui
-    Instance.new("UICorner", _iconFrame).CornerRadius = UDim.new(0.25, 0)
-
-    local _gradient = Instance.new("UIGradient")
-    _gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 27, 75)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 10, 18)),
-    })
-    _gradient.Rotation = 135
-    _gradient.Parent = _iconFrame
-
-    local _stroke = Instance.new("UIStroke")
-    _stroke.Color        = Color3.fromRGB(99, 102, 241)
-    _stroke.Thickness    = 1.5
-    _stroke.Transparency = 0.3
-    _stroke.Parent       = _iconFrame
-
-    -- "MzD" tekst
-    local _labelMzD = Instance.new("TextLabel")
-    _labelMzD.Size                   = UDim2.new(1, 0, 0.55, 0)
-    _labelMzD.Position               = UDim2.fromOffset(0, 6)
-    _labelMzD.BackgroundTransparency = 1
-    _labelMzD.Text                   = "MzD"
-    _labelMzD.TextColor3             = Color3.fromRGB(255, 255, 255)
-    _labelMzD.Font                   = Enum.Font.GothamBold
-    _labelMzD.TextSize               = 17
-    _labelMzD.ZIndex                 = 11
-    _labelMzD.Parent                 = _iconFrame
-    local _tg = Instance.new("UIGradient")
-    _tg.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(165, 180, 252)),
-    })
-    _tg.Rotation = 90
-    _tg.Parent = _labelMzD
-
-    -- "Hub" tekst
-    local _labelHub = Instance.new("TextLabel")
-    _labelHub.Size                   = UDim2.new(1, 0, 0.35, 0)
-    _labelHub.Position               = UDim2.new(0, 0, 0.6, 0)
-    _labelHub.BackgroundTransparency = 1
-    _labelHub.Text                   = "Hub"
-    _labelHub.TextColor3             = Color3.fromRGB(129, 140, 248)
-    _labelHub.Font                   = Enum.Font.Gotham
-    _labelHub.TextSize               = 11
-    _labelHub.ZIndex                 = 11
-    _labelHub.Parent                 = _iconFrame
-
-    -- Klikbaar transparant knopje over alles
-    local _iconBtn = Instance.new("TextButton")
-    _iconBtn.Size                   = UDim2.new(0, 62, 0, 62)
-    _iconBtn.Position               = UDim2.new(ICON_X, 0, ICON_Y, 0)
-    _iconBtn.BackgroundTransparency = 1
-    _iconBtn.Text                   = ""
-    _iconBtn.ZIndex                 = 12
-    _iconBtn.Parent                 = _iconGui
-    Instance.new("UICorner", _iconBtn).CornerRadius = UDim.new(0.25, 0)
-
-    -- Hover
-    _iconBtn.MouseEnter:Connect(function()
-        _stroke.Transparency = 0
-        _stroke.Thickness    = 2
-        _shadow.BackgroundTransparency = 0.4
-    end)
-    _iconBtn.MouseLeave:Connect(function()
-        _stroke.Transparency = 0.3
-        _stroke.Thickness    = 1.5
-        _shadow.BackgroundTransparency = 0.6
-    end)
-
-    -- Drag logic
-    local _dragging  = false
-    local _dragStart = nil
-    local _startPos  = nil
-    local _dragMoved = false
-
-    local function moveAll(pos)
-        _iconFrame.Position = pos
-        _iconBtn.Position   = pos
-        _shadow.Position    = UDim2.new(pos.X.Scale, pos.X.Offset - 3, pos.Y.Scale, pos.Y.Offset - 3)
-    end
-
-    _iconBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-            _dragging  = true
-            _dragMoved = false
-            _dragStart = input.Position
-            _startPos  = _iconFrame.Position
-        end
-    end)
-
-    _iconBtn.InputChanged:Connect(function(input)
-        if _dragging and (
-            input.UserInputType == Enum.UserInputType.MouseMovement or
-            input.UserInputType == Enum.UserInputType.Touch
-        ) then
-            local delta = input.Position - _dragStart
-            if math.abs(delta.X) > 4 or math.abs(delta.Y) > 4 then
-                _dragMoved = true
-            end
-            moveAll(UDim2.new(
-                _startPos.X.Scale, _startPos.X.Offset + delta.X,
-                _startPos.Y.Scale, _startPos.Y.Offset + delta.Y
-            ))
-        end
-    end)
-
-    _iconBtn.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-            _dragging = false
-        end
-    end)
-
-    -- Klik = venster maximaliseren
-    _iconBtn.MouseButton1Click:Connect(function()
-        if _dragMoved then return end
-        if not _wVisible then
-            setWindowVisible(true)
-        end
-    end)
-
-    -- ============================================
-    -- BESTAANDE GUI OPRUIMEN + FLUENT LADEN
-    -- ============================================
-    twait(0.5)
-    pcall(function()
-        for _, gui in pairs(Player.PlayerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Name ~= "MzDIconToggle" then
-                for _, d in pairs(gui:GetDescendants()) do
-                    if d:IsA("TextLabel") and d.Text == "MzD Hub" then gui:Destroy() break end
-                end
-            end
-        end
-    end)
+    destroyOldGui(Player.PlayerGui)
+    pcall(function() destroyOldGui(game:GetService("CoreGui")) end)
+    pcall(function() if typeof(gethui) == "function" then destroyOldGui(gethui()) end end)
     twait(0.3)
 
+    -- ═══════ SNAPSHOT BESTAANDE GUIS ═══════
+    local preExisting = {}
+    local function snapshot(parent)
+        pcall(function()
+            for _, g in pairs(parent:GetChildren()) do preExisting[g] = true end
+        end)
+    end
+    snapshot(Player.PlayerGui)
+    pcall(function() snapshot(game:GetService("CoreGui")) end)
+    pcall(function() if typeof(gethui) == "function" then snapshot(gethui()) end end)
+
+    -- ═══════ LOAD FLUENT ═══════
     local Fluent, SaveManager, InterfaceManager
     local ok1, r1 = pcall(function()
         return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
@@ -246,7 +71,7 @@ function M.init(Modules)
     end)
     InterfaceManager = ok3 and r3 or nil
 
-    -- GUI CONSTANTEN
+    -- ═══════ CONSTANTS ═══════
     local RAR  = MzD.getAvailableRarities()
     local MUT  = MzD.getAvailableMutations()
     local FM   = {"Collect", "Collect, Place & Max"}
@@ -255,116 +80,265 @@ function M.init(Modules)
     local GODWALKY  = {"5","3","1","0","-1","-2","-3","-5","-8","-10","-15"}
     local GODFLOORY = {"15","12","10","8","5","3","0","-3","-5","-8","-10","-15","-20"}
 
-    -- Geen MinimizeKey — wij regelen dat zelf
+    -- ═══════ FLUENT WINDOW ═══════
     local W = Fluent:CreateWindow({
-        Title    = "MzD Hub",
-        SubTitle = "v13.0 Clean",
-        TabWidth = 160,
-        Size     = UDim2.fromOffset(640, 540),
-        Acrylic  = true,
-        Theme    = "Dark",
+        Title       = "MzD Hub",
+        SubTitle    = "v13.0 Clean",
+        TabWidth    = 160,
+        Size        = UDim2.fromOffset(640, 540),
+        Acrylic     = true,
+        Theme       = "Dark",
+        MinimizeKey = Enum.KeyCode.Unknown
     })
 
-    -- ============================================
-    -- NA LADEN: _winFrame cachen + Ctrl hint + X knop fixen
-    -- ============================================
-    task.spawn(function()
-        twait(1)
+    twait(1.5)
+
+    -- ═══════ VIND FLUENT SCREENGUI (ROBUUST) ═══════
+    local fluentGui = nil
+    local fluentChildren = {}
+
+    local function searchNew(parent)
+        if fluentGui then return end
         pcall(function()
-            for _, gui in pairs(Player.PlayerGui:GetChildren()) do
-                if gui:IsA("ScreenGui") and gui.Name ~= "MzDIconToggle" then
-                    for _, d in pairs(gui:GetDescendants()) do
-                        if d:IsA("TextLabel") and d.Text == "MzD Hub" then
-
-                            -- Cache de root window Frame
-                            local f = d
-                            while f and not f:IsA("ScreenGui") do
-                                if f:IsA("Frame") and f.Parent:IsA("ScreenGui") then
-                                    _winFrame = f
-                                    break
-                                end
-                                f = f.Parent
-                            end
-
-                            -- Verberg alle keybind hint labels (Ctrl / RightControl tekst)
-                            for _, lbl in pairs(gui:GetDescendants()) do
-                                if lbl:IsA("TextLabel") then
-                                    local t = lbl.Text:lower()
-                                    if t:find("ctrl") or t:find("control") or t:find("minimize") or t:find("keybind") then
-                                        lbl.Visible = false
-                                    end
-                                end
-                            end
-
-                            -- Debug: print alle knoppen
-                            for _, btn in pairs(gui:GetDescendants()) do
-                                if btn:IsA("ImageButton") or btn:IsA("TextButton") then
-                                    warn("[MzD] Knop: '" .. btn.Name .. "' | Parent: '" .. btn.Parent.Name .. "'")
-                                end
-                            end
-
-                            -- Vervang de X sluitknop
-                            local TARGET_NAMES = {
-                                "close","closebutton","exit","x",
-                                "closewindow","close_button","btnclose",
-                            }
-                            for _, btn in pairs(gui:GetDescendants()) do
-                                if (btn:IsA("ImageButton") or btn:IsA("TextButton"))
-                                and not btn:FindFirstChild("_mzdReplaced") then
-                                    local n = string.lower(btn.Name)
-                                    local matched = false
-                                    for _, t in pairs(TARGET_NAMES) do
-                                        if n == t then matched = true break end
-                                    end
-                                    if matched then
-                                        warn("[MzD] Sluitknop vervangen: " .. btn.Name)
-                                        local parent   = btn.Parent
-                                        local pos      = btn.Position
-                                        local size     = btn.Size
-                                        local zindex   = btn.ZIndex
-                                        local imgId    = btn:IsA("ImageButton") and btn.Image or nil
-                                        local imgColor = btn:IsA("ImageButton") and btn.ImageColor3 or Color3.new(1,1,1)
-                                        local bgTrans  = btn.BackgroundTransparency
-                                        local bgColor  = btn.BackgroundColor3
-                                        btn:Destroy()
-
-                                        local newBtn
-                                        if imgId and imgId ~= "" then
-                                            newBtn = Instance.new("ImageButton")
-                                            newBtn.Image       = imgId
-                                            newBtn.ImageColor3 = imgColor
-                                        else
-                                            newBtn = Instance.new("TextButton")
-                                            newBtn.Text       = "✕"
-                                            newBtn.TextColor3 = Color3.new(1,1,1)
-                                            newBtn.Font       = Enum.Font.GothamBold
-                                            newBtn.TextSize   = 14
-                                        end
-                                        newBtn.Name                   = "_mzdCloseBtn"
-                                        newBtn.Position               = pos
-                                        newBtn.Size                   = size
-                                        newBtn.ZIndex                 = zindex
-                                        newBtn.BackgroundTransparency = bgTrans
-                                        newBtn.BackgroundColor3       = bgColor
-                                        local tag = Instance.new("BoolValue")
-                                        tag.Name   = "_mzdReplaced"
-                                        tag.Parent = newBtn
-                                        newBtn.Parent = parent
-                                        newBtn.MouseButton1Click:Connect(function()
-                                            setWindowVisible(false)
-                                        end)
-                                    end
-                                end
-                            end
-                            break
-                        end
-                    end
+            for _, gui in pairs(parent:GetChildren()) do
+                if gui:IsA("ScreenGui") and gui.Name ~= "MzDHubToggle" and not preExisting[gui] then
+                    fluentGui = gui
+                    return
                 end
             end
         end)
+    end
+
+    local function searchContent(parent)
+        if fluentGui then return end
+        pcall(function()
+            for _, gui in pairs(parent:GetChildren()) do
+                if gui:IsA("ScreenGui") and gui.Name ~= "MzDHubToggle" then
+                    for _, d in pairs(gui:GetDescendants()) do
+                        if d:IsA("TextLabel") and (d.Text == "MzD Hub" or d.Text == "v13.0 Clean") then
+                            fluentGui = gui
+                            return
+                        end
+                    end
+                end
+                if fluentGui then return end
+            end
+        end)
+    end
+
+    -- Zoek in alle mogelijke locaties
+    searchNew(Player.PlayerGui)
+    pcall(function() searchNew(game:GetService("CoreGui")) end)
+    pcall(function() if typeof(gethui) == "function" then searchNew(gethui()) end end)
+    if not fluentGui then
+        searchContent(Player.PlayerGui)
+        pcall(function() searchContent(game:GetService("CoreGui")) end)
+        pcall(function() if typeof(gethui) == "function" then searchContent(gethui()) end end)
+    end
+
+    -- Sla children op voor visibility toggle
+    if fluentGui then
+        pcall(function()
+            for _, child in pairs(fluentGui:GetChildren()) do
+                tinsert(fluentChildren, child)
+            end
+        end)
+    end
+
+    -- ═══════ TOGGLE LOGICA ═══════
+    local guiVisible = true
+
+    local function setFluentVisible(vis)
+        guiVisible = vis
+        if fluentGui then
+            pcall(function() fluentGui.Enabled = vis end)
+        end
+        for _, child in pairs(fluentChildren) do
+            pcall(function()
+                if child:IsA("GuiObject") or child:IsA("CanvasGroup") then
+                    child.Visible = vis
+                end
+            end)
+        end
+    end
+
+    -- ═══════ TOGGLE BUTTON ═══════
+    local toggleGui = Instance.new("ScreenGui")
+    toggleGui.Name = "MzDHubToggle"
+    toggleGui.ResetOnSpawn = false
+    toggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    toggleGui.DisplayOrder = 999999
+    if not pcall(function() toggleGui.Parent = Player.PlayerGui end) or not toggleGui.Parent then
+        pcall(function() toggleGui.Parent = game:GetService("CoreGui") end)
+    end
+
+    -- Container (wordt gesleept)
+    local container = Instance.new("Frame")
+    container.Name = "MzDContainer"
+    container.Size = UDim2.fromOffset(62, 62)
+    container.Position = UDim2.new(0.6, 0, 0.025, 0)
+    container.AnchorPoint = Vector2.new(0.5, 0)
+    container.BackgroundTransparency = 1
+    container.BorderSizePixel = 0
+    container.ZIndex = 995
+    container.Parent = toggleGui
+
+    -- Glow ring (pulserend)
+    local glow = Instance.new("Frame")
+    glow.Name = "Glow"
+    glow.Size = UDim2.fromScale(1.15, 1.15)
+    glow.Position = UDim2.fromScale(0.5, 0.5)
+    glow.AnchorPoint = Vector2.new(0.5, 0.5)
+    glow.BackgroundColor3 = Color3.fromRGB(120, 60, 255)
+    glow.BackgroundTransparency = 0.6
+    glow.BorderSizePixel = 0
+    glow.ZIndex = 996
+    glow.Parent = container
+    Instance.new("UICorner", glow).CornerRadius = UDim.new(1, 0)
+
+    -- Hoofdknop
+    local btn = Instance.new("TextButton")
+    btn.Name = "MzDBtn"
+    btn.Size = UDim2.fromScale(0.82, 0.82)
+    btn.Position = UDim2.fromScale(0.5, 0.5)
+    btn.AnchorPoint = Vector2.new(0.5, 0.5)
+    btn.BackgroundColor3 = Color3.fromRGB(16, 12, 32)
+    btn.Text = ""
+    btn.AutoButtonColor = false
+    btn.BorderSizePixel = 0
+    btn.ZIndex = 998
+    btn.Parent = container
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+
+    local btnStroke = Instance.new("UIStroke")
+    btnStroke.Color = Color3.fromRGB(140, 90, 255)
+    btnStroke.Thickness = 2.5
+    btnStroke.Parent = btn
+
+    -- Highlight boog (3D diepte)
+    local hl = Instance.new("Frame")
+    hl.Size = UDim2.fromScale(0.6, 0.1)
+    hl.Position = UDim2.new(0.5, 0, 0.1, 0)
+    hl.AnchorPoint = Vector2.new(0.5, 0)
+    hl.BackgroundColor3 = Color3.fromRGB(200, 170, 255)
+    hl.BackgroundTransparency = 0.75
+    hl.BorderSizePixel = 0
+    hl.ZIndex = 999
+    hl.Parent = btn
+    Instance.new("UICorner", hl).CornerRadius = UDim.new(1, 0)
+
+    -- "MzD" tekst
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.fromScale(1, 0.6)
+    label.Position = UDim2.fromScale(0.5, 0.42)
+    label.AnchorPoint = Vector2.new(0.5, 0.5)
+    label.BackgroundTransparency = 1
+    label.Text = "MzD"
+    label.TextColor3 = Color3.fromRGB(200, 160, 255)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 16
+    label.ZIndex = 1000
+    label.Parent = btn
+
+    -- Status dot
+    local dot = Instance.new("Frame")
+    dot.Size = UDim2.fromOffset(8, 8)
+    dot.Position = UDim2.new(0.5, 0, 0.82, 0)
+    dot.AnchorPoint = Vector2.new(0.5, 0.5)
+    dot.BackgroundColor3 = Color3.fromRGB(80, 255, 120)
+    dot.BorderSizePixel = 0
+    dot.ZIndex = 1000
+    dot.Parent = btn
+    Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+
+    -- ═══════ VISUELE FEEDBACK ═══════
+    local function updateIconLook()
+        if guiVisible then
+            btn.BackgroundColor3   = Color3.fromRGB(16, 12, 32)
+            btnStroke.Color        = Color3.fromRGB(140, 90, 255)
+            label.TextColor3       = Color3.fromRGB(200, 160, 255)
+            glow.BackgroundColor3  = Color3.fromRGB(120, 60, 255)
+            dot.BackgroundColor3   = Color3.fromRGB(80, 255, 120)
+            hl.BackgroundColor3    = Color3.fromRGB(200, 170, 255)
+        else
+            btn.BackgroundColor3   = Color3.fromRGB(28, 10, 10)
+            btnStroke.Color        = Color3.fromRGB(200, 50, 50)
+            label.TextColor3       = Color3.fromRGB(255, 100, 100)
+            glow.BackgroundColor3  = Color3.fromRGB(200, 40, 40)
+            dot.BackgroundColor3   = Color3.fromRGB(255, 60, 60)
+            hl.BackgroundColor3    = Color3.fromRGB(255, 120, 120)
+        end
+    end
+
+    -- ═══════ PULSE ANIMATIE ═══════
+    task.spawn(function()
+        while toggleGui and toggleGui.Parent do
+            pcall(function()
+                local t1 = TS:Create(glow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+                    BackgroundTransparency = 0.35, Size = UDim2.fromScale(1.25, 1.25)
+                })
+                t1:Play() t1.Completed:Wait()
+                local t2 = TS:Create(glow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+                    BackgroundTransparency = 0.75, Size = UDim2.fromScale(1.08, 1.08)
+                })
+                t2:Play() t2.Completed:Wait()
+            end)
+        end
     end)
 
-    -- Dummy objecten voor status_loop.lua
+    -- ═══════ DRAG + KLIK LOGICA ═══════
+    local dragging  = false
+    local dragStart = Vector3.zero
+    local startPos  = UDim2.new()
+    local totalDrag = 0
+
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging  = true
+            dragStart = input.Position
+            startPos  = container.Position
+            totalDrag = 0
+        end
+    end)
+
+    UIS.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            totalDrag = delta.Magnitude
+            container.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    UIS.InputEnded:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch) then
+            dragging = false
+            if totalDrag < 8 then
+                -- Klik → toggle GUI
+                setFluentVisible(not guiVisible)
+                updateIconLook()
+                -- Klik animatie
+                task.spawn(function()
+                    pcall(function()
+                        TS:Create(btn, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                            Size = UDim2.fromScale(0.7, 0.7)
+                        }):Play()
+                        twait(0.08)
+                        TS:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                            Size = UDim2.fromScale(0.82, 0.82)
+                        }):Play()
+                    end)
+                end)
+            end
+        end
+    end)
+
+    -- ═══════ DUMMY PARAGRAPHS ═══════
     local dP = { SetTitle = function() end, SetDesc = function() end }
     local FSP, FPP, LBSP, TTSP, FCSP, DMSP, VSP, ASP, FISP, MSP, USP, MFSP, GDSP, AFKSP, IP = dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP, dP
 
@@ -397,9 +371,9 @@ function M.init(Modules)
         MzD.S.SelectedBrainrots = s
     end)
 
-    FT:AddDropdown("FarmMutation", {Title = "💎 Mutatie",   Values = MUT, Default = "None",         Multi = false}):OnChanged(function(v) MzD.S.TargetMutation = v end)
-    FT:AddDropdown("FarmMode",     {Title = "⚙️ Mode",      Values = FM,  Default = MzD.S.FarmMode, Multi = false}):OnChanged(function(v) MzD.S.FarmMode = v end)
-    FT:AddDropdown("FarmSlot",     {Title = "📦 Slot",      Values = SL,  Default = MzD.S.FarmSlot, Multi = false}):OnChanged(function(v) MzD.S.FarmSlot = v end)
+    FT:AddDropdown("FarmMutation", {Title = "💎 Mutatie",  Values = MUT, Default = "None",         Multi = false}):OnChanged(function(v) MzD.S.TargetMutation = v end)
+    FT:AddDropdown("FarmMode",     {Title = "⚙️ Mode",     Values = FM,  Default = MzD.S.FarmMode, Multi = false}):OnChanged(function(v) MzD.S.FarmMode = v end)
+    FT:AddDropdown("FarmSlot",     {Title = "📦 Slot",     Values = SL,  Default = MzD.S.FarmSlot, Multi = false}):OnChanged(function(v) MzD.S.FarmSlot = v end)
     FT:AddSlider("FarmMaxLevel",   {Title = "📈 Max Level", Default = MzD.S.MaxLevel, Min = 1, Max = 500, Rounding = 0}):OnChanged(function(v) MzD.S.MaxLevel = mfloor(v) end)
 
     local LBTG = FT:AddToggle("LBToggle", {Title = "🎲 Auto Lucky Blocks", Default = true})
@@ -412,11 +386,8 @@ function M.init(Modules)
 
     -- ========== FACTORY TAB ==========
     local FCT = W:AddTab({Title = "Factory", Icon = "factory"})
-
     local FCTG = FCT:AddToggle("FactoryToggle", {Title = "🏭 Start Factory", Default = false})
-    FCTG:OnChanged(function(v)
-        if v then MzD.findBase() MzD.startFactoryLoop() else MzD.stopFactoryLoop() end
-    end)
+    FCTG:OnChanged(function(v) if v then MzD.findBase() MzD.startFactoryLoop() else MzD.stopFactoryLoop() end end)
     FCT:AddDropdown("FactoryRarity",   {Title = "⭐ Rarity",   Values = RAR, Default = MzD.S.FactoryRarity,   Multi = false}):OnChanged(function(v) MzD.S.FactoryRarity = v end)
     FCT:AddDropdown("FactoryMutation", {Title = "💎 Mutatie",  Values = MUT, Default = MzD.S.FactoryMutation, Multi = false}):OnChanged(function(v) MzD.S.FactoryMutation = v end)
     FCT:AddDropdown("FactorySlot",     {Title = "📦 Werkslot", Values = SL,  Default = MzD.S.FactorySlot,     Multi = false}):OnChanged(function(v) MzD.S.FactorySlot = v end)
@@ -424,39 +395,31 @@ function M.init(Modules)
 
     -- ========== EVENTS TAB ==========
     local ET = W:AddTab({Title = "Events", Icon = "party-popper"})
-
-    local DMTG = ET:AddToggle("DoomToggle", {Title = "🌋 Collect Auto Doom Coins", Default = true})
+    local DMTG = ET:AddToggle("DoomToggle",      {Title = "🌋 Collect Auto Doom Coins",          Default = true})
     DMTG:OnChanged(function(v) if v then MzD.startDoomCollector() else MzD.stopDoomCollector() end end)
-
-    local VTG = ET:AddToggle("ValentineToggle", {Title = "💝 Auto Collect Hearts and Candy", Default = true})
-    VTG:OnChanged(function(v) if v then MzD.startValentine() else MzD.stopValentine() end end)
-
-    local ATG = ET:AddToggle("ArcadeToggle", {Title = "🕹️ Auto collect controllers & coins", Default = true})
-    ATG:OnChanged(function(v) if v then MzD.startArcade() else MzD.stopArcade() end end)
-
-    local FITG = ET:AddToggle("FireiceToggle", {Title = "🔥 Auto Fire & Ice Coins", Default = true})
-    FITG:OnChanged(function(v) if v then MzD.startFireice() else MzD.stopFireice() end end)
+    local VTG  = ET:AddToggle("ValentineToggle",  {Title = "💝 Auto Collect Hearts and Candy",    Default = true})
+    VTG:OnChanged(function(v)  if v then MzD.startValentine()     else MzD.stopValentine()     end end)
+    local ATG  = ET:AddToggle("ArcadeToggle",     {Title = "🕹️ Auto collect controllers & coins", Default = true})
+    ATG:OnChanged(function(v)  if v then MzD.startArcade()        else MzD.stopArcade()        end end)
+    local FITG = ET:AddToggle("FireiceToggle",    {Title = "🔥 Auto Fire & Ice Coins",            Default = true})
+    FITG:OnChanged(function(v) if v then MzD.startFireice()       else MzD.stopFireice()       end end)
 
     -- ========== TOOLS TAB ==========
     local AT2 = W:AddTab({Title = "Tools", Icon = "wrench"})
+    local MTG  = AT2:AddToggle("MoneyToggle",   {Title = "💰 Auto Money",            Default = false})
+    MTG:OnChanged(function(v)  if v then MzD.findBase() MzD.startMoney()       else MzD.stopMoney()       end end)
+    local UTG  = AT2:AddToggle("UpgradeToggle", {Title = "⬆️ Auto Upgrade All Slots", Default = false})
+    UTG:OnChanged(function(v)  if v then MzD.findBase() MzD.startAutoUpgrade() else MzD.stopAutoUpgrade() end end)
+    local MFTG = AT2:AddToggle("MapToggle",     {Title = "🗺️ Auto Map Fixer",         Default = false})
+    MFTG:OnChanged(function(v) if v then MzD.startMapFixer()                   else MzD.stopMapFixer()    end end)
+    local GDTG = AT2:AddToggle("GodToggle",     {Title = "😇 God Mode",               Default = false})
+    GDTG:OnChanged(function(v) if v then MzD.enableGod()                       else MzD.disableGod()     end end)
 
-    local MTG = AT2:AddToggle("MoneyToggle", {Title = "💰 Auto Money", Default = false})
-    MTG:OnChanged(function(v) if v then MzD.findBase() MzD.startMoney() else MzD.stopMoney() end end)
-
-    local UTG = AT2:AddToggle("UpgradeToggle", {Title = "⬆️ Auto Upgrade All Slots", Default = false})
-    UTG:OnChanged(function(v) if v then MzD.findBase() MzD.startAutoUpgrade() else MzD.stopAutoUpgrade() end end)
-
-    local MFTG = AT2:AddToggle("MapToggle", {Title = "🗺️ Auto Map Fixer", Default = false})
-    MFTG:OnChanged(function(v) if v then MzD.startMapFixer() else MzD.stopMapFixer() end end)
-
-    local GDTG = AT2:AddToggle("GodToggle", {Title = "😇 God Mode", Default = false})
-    GDTG:OnChanged(function(v) if v then MzD.enableGod() else MzD.disableGod() end end)
-
-    AT2:AddDropdown("GodWalkY",  {Title = "🚶 Loop Y Offset", Values = GODWALKY,  Default = "0",   Multi = false}):OnChanged(function(v)
+    AT2:AddDropdown("GodWalkY", {Title = "🚶 Loop Y Offset", Values = GODWALKY, Default = "0", Multi = false}):OnChanged(function(v)
         MzD.S.GodWalkY = tonumber(v) or 0
         if MzD._isGod then god_mod.godTeleportUnder() end
     end)
-    AT2:AddDropdown("GodFloorY", {Title = "🟫 Vloer Y",       Values = GODFLOORY, Default = "-10", Multi = false}):OnChanged(function(v)
+    AT2:AddDropdown("GodFloorY", {Title = "🟫 Vloer Y", Values = GODFLOORY, Default = "-10", Multi = false}):OnChanged(function(v)
         MzD.S.GodFloorY = tonumber(v) or -10
         if MzD._isGod then
             local map = MzD.mapFindCurrentMap()
@@ -473,7 +436,6 @@ function M.init(Modules)
     AT2:AddToggle("InstantToggle", {Title = "⚡ Instant Pickup", Default = true}):OnChanged(function(v)
         MzD.S.InstantPickup = v if v then MzD.setupInstant() end
     end)
-
     local AFKTG = AT2:AddToggle("AFKToggle", {Title = "🕐 Anti-AFK", Default = true})
     AFKTG:OnChanged(function(v) if v then MzD.startAFK() else MzD.stopAFK() end end)
 
@@ -486,7 +448,7 @@ function M.init(Modules)
         SaveManager:BuildConfigSection(ST2)
     end
 
-    -- Store references for status update loop
+    -- ═══════ STORE REFS ═══════
     M.guiRefs = {
         Fluent = Fluent, W = W,
         FSP = FSP, FPP = FPP, FTG = FTG,
