@@ -47,6 +47,15 @@ function M.init(Modules)
     }
 
     -- ============================================
+    -- WALL GAPS per map
+    -- Gaten in de FrontWall, format: { xMin, xMax }
+    -- PhantomMap: gat voor Staircase naar Ghost Ship
+    -- ============================================
+    local MAP_WALL_GAPS = {
+        PhantomMap = { { 390, 535 } },
+    }
+
+    -- ============================================
     -- HELPERS
     -- ============================================
 
@@ -219,6 +228,57 @@ function M.init(Modules)
     -- MUREN BOUWEN
     -- ============================================
 
+    -- Bouwt FrontWall segmenten voor één X-range, met gaps uitgeknipt.
+    -- gaps = list van { xMin, xMax } die GEEN muur krijgen.
+    local function buildFrontWallSegments(makeWall, makeStripe, segStartX, segEndX, gaps, theme, index)
+        local halfW     = CONFIG.FLOOR_HALF_WIDTH
+        local thick     = CONFIG.WALL_THICKNESS
+        local floorTop  = MzD.S.GodFloorY + 2
+        local stripeBot = floorTop + 1
+        local stripeMid = floorTop + CONFIG.WALL_HEIGHT * 0.2
+        local stripeTop = floorTop + CONFIG.WALL_HEIGHT * 0.85
+        local cz        = halfW + thick / 2
+
+        -- Bereken welke X-ranges WEL een muur krijgen (gaps uitgeknipt)
+        local ranges = {{ segStartX, segEndX }}
+        for _, gap in ipairs(gaps) do
+            local gMin, gMax = gap[1], gap[2]
+            local newRanges  = {}
+            for _, r in ipairs(ranges) do
+                local rMin, rMax = r[1], r[2]
+                if gMax <= rMin or gMin >= rMax then
+                    -- Geen overlap: range intact
+                    tinsert(newRanges, r)
+                elseif gMin <= rMin and gMax >= rMax then
+                    -- Gap dekt hele range: weggooien
+                else
+                    -- Gedeeltelijke overlap: splits
+                    if gMin > rMin then tinsert(newRanges, { rMin, gMin }) end
+                    if gMax < rMax then tinsert(newRanges, { gMax, rMax }) end
+                end
+            end
+            ranges = newRanges
+        end
+
+        -- Bouw een wall part per overblijvende range
+        for ri, r in ipairs(ranges) do
+            local w       = r[2] - r[1]
+            if w < 1 then continue end
+            local centerX = r[1] + w / 2
+            local suffix  = index .. (ri > 1 and ("_" .. ri) or "")
+            local fw = makeWall(
+                "FrontWall_" .. suffix,
+                Vector3.new(w, CONFIG.WALL_HEIGHT, thick),
+                Vector3.new(centerX, WALL_MID_Y, cz)
+            )
+            buildSurfaceGui(fw, Enum.NormalId.Front, theme)
+            buildSurfaceGui(fw, Enum.NormalId.Back,  theme)
+            makeStripe("FrontStripe_bot_" .. suffix, Vector3.new(w, 2, 0.4), Vector3.new(centerX, stripeBot, cz + thick/2 + 0.3))
+            makeStripe("FrontStripe_mid_" .. suffix, Vector3.new(w, 1, 0.4), Vector3.new(centerX, stripeMid, cz + thick/2 + 0.3))
+            makeStripe("FrontStripe_top_" .. suffix, Vector3.new(w, 2, 0.4), Vector3.new(centerX, stripeTop, cz + thick/2 + 0.3))
+        end
+    end
+
     function MzD.mapBuildWalls(map, startX, endX)
         if not map then return end
 
@@ -229,7 +289,9 @@ function M.init(Modules)
 
         local existingFolder = map:FindFirstChild("MzDHubWalls")
         if existingFolder then
+            -- Zoek FrontWall_1 OF FrontWall_1_1 (gesplitst door gap)
             local firstWall = existingFolder:FindFirstChild("FrontWall_1")
+                           or existingFolder:FindFirstChild("FrontWall_1_1")
             if firstWall
                and mabs(firstWall.Size.Y - CONFIG.WALL_HEIGHT) < 1
                and mabs(firstWall.Position.Y - WALL_MID_Y) < 1 then
@@ -239,6 +301,9 @@ function M.init(Modules)
             end
             pcall(function() existingFolder:Destroy() end)
         end
+
+        -- Haal gaps op voor deze specifieke map (leeg als geen gaps gedefinieerd)
+        local gaps = MAP_WALL_GAPS[map.Name] or {}
 
         local wallFolder  = Instance.new("Folder")
         wallFolder.Name   = "MzDHubWalls"
@@ -276,21 +341,16 @@ function M.init(Modules)
         local index    = 1
         while currentX < endX do
             local segmentLength = mmin(CONFIG.MAX_SEGMENT_LENGTH, endX - currentX)
-            local centerX       = currentX + segmentLength / 2
+            local segStartX     = currentX
+            local segEndX       = currentX + segmentLength
+            local centerX       = segStartX + segmentLength / 2
             local halfW         = CONFIG.FLOOR_HALF_WIDTH
             local thick         = CONFIG.WALL_THICKNESS
 
-            local frontWall = makeWall(
-                "FrontWall_" .. index,
-                Vector3.new(segmentLength, CONFIG.WALL_HEIGHT, thick),
-                Vector3.new(centerX, WALL_MID_Y, halfW + thick / 2)
-            )
-            buildSurfaceGui(frontWall, Enum.NormalId.Front, theme)
-            buildSurfaceGui(frontWall, Enum.NormalId.Back,  theme)
-            makeStripe("FrontStripe_bot_" .. index, Vector3.new(segmentLength, 2, 0.4), Vector3.new(centerX, stripeBot, halfW + thick + 0.3))
-            makeStripe("FrontStripe_mid_" .. index, Vector3.new(segmentLength, 1, 0.4), Vector3.new(centerX, stripeMid, halfW + thick + 0.3))
-            makeStripe("FrontStripe_top_" .. index, Vector3.new(segmentLength, 2, 0.4), Vector3.new(centerX, stripeTop, halfW + thick + 0.3))
+            -- FrontWall: met gaps uitgeknipt per map
+            buildFrontWallSegments(makeWall, makeStripe, segStartX, segEndX, gaps, theme, index)
 
+            -- BackWall: altijd volledig (geen gaps nodig)
             local backWall = makeWall(
                 "BackWall_" .. index,
                 Vector3.new(segmentLength, CONFIG.WALL_HEIGHT, thick),
@@ -398,7 +458,6 @@ function M.init(Modules)
 
         pcall(function() MzD.mapRunFix() end)
 
-        -- Event: directe reactie bij nieuwe map
         if MzD._mapAddedConn then
             pcall(function() MzD._mapAddedConn:Disconnect() end)
         end
@@ -413,7 +472,6 @@ function M.init(Modules)
             end
         end)
 
-        -- Event: reset bij verwijderen huidige map
         if MzD._mapRemovedConn then
             pcall(function() MzD._mapRemovedConn:Disconnect() end)
         end
@@ -424,7 +482,6 @@ function M.init(Modules)
             end
         end)
 
-        -- Polling als fallback
         if MzD.mapFixerThread then return end
         MzD.mapFixerThread = tspawn(function()
             while MzD._mapFixerActive do
