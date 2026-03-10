@@ -121,23 +121,14 @@ function M.init(Modules)
             end
         end)
 
-        -- Methode 3: firetouchinterest met killparts in de buurt
+        -- Methode 3: firetouchinterest van enemy parts met eigen HRP
         pcall(function()
             local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
             for _, d in ipairs(enemy:GetDescendants()) do
                 if d:IsA("BasePart") then
-                    -- Touch met eigen HRP (triggert eventuele kill scripts)
-                    if hrp then
-                        firetouchinterest(d, hrp, 0)
-                        firetouchinterest(d, hrp, 1)
-                    end
-                    -- Zoek kill parts in workspace en fire ze op de enemy
-                    for _, wp in ipairs(workspace:GetDescendants()) do
-                        if wp:IsA("BasePart") and MzD.mapIsKillPart and MzD.mapIsKillPart(wp) then
-                            firetouchinterest(wp, d, 0)
-                            firetouchinterest(wp, d, 1)
-                        end
-                    end
+                    firetouchinterest(d, hrp, 0)
+                    firetouchinterest(d, hrp, 1)
                 end
             end
         end)
